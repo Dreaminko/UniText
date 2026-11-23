@@ -1,0 +1,52 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: UniText_Display_Lite
+  m_Shader: {fileID: 4800000, guid: e7a100024d9c40008000000000000004, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _AuxTex:
+        m_Texture: {fileID: 2800000, guid: e7a100034d9c40008000000000000008, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _BufferTex:
+        m_Texture: {fileID: 8600000, guid: e7a100034d9c40008000000000000009, type: 2}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _FontAtlas:
+        m_Texture: {fileID: 2800000, guid: e7a100034d9c40008000000000000001, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _Billboard: 0
+    - _CornerRadius: 0.06
+    - _Opacity: 1
+    - _Padding: 0.045
+    - _ShadowStrength: 0.72
+    - _DisplayRows: 6
+    - _RowPx: 384
+    - _LiveGeometry: 1
+    - _KeepGlyphAspect: 1
+    m_Colors:
+    - _BgColor: {r: 0.04, g: 0.06, b: 0.1, a: 0.84}
+    - _BorderColor: {r: 0.28, g: 0.38, b: 0.56, a: 0.55}
+  m_BuildTextureStacks: []

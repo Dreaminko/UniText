@@ -1,0 +1,23 @@
+{
+  "dependencies": {
+    "com.vrchat.avatars": {
+      "version": "3.7.0"
+    },
+    "nadena.dev.modular-avatar": {
+      "version": "1.10.0"
+    },
+    "nadena.dev.ndmf": {
+      "version": "1.5.0"
+    }
+  },
+  "locked": {
+    "dev.dreaminko.unitext": {
+      "version": "1.0.0",
+      "dependencies": {
+        "com.vrchat.avatars": ">=3.7.0",
+        "nadena.dev.modular-avatar": ">=1.10.0",
+        "nadena.dev.ndmf": ">=1.5.0"
+      }
+    }
+  }
+}
