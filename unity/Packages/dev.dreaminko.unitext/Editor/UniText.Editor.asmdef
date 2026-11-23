@@ -1,0 +1,40 @@
+{
+  "name": "UniText.Editor",
+  "rootNamespace": "UniText.Editor",
+  "references": [
+    "UniText.Runtime",
+    "nadena.dev.modular-avatar.core",
+    "nadena.dev.ndmf"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITEXT_VRCSDK3",
+    "UNITEXT_MA",
+    "UNITEXT_NDMF"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.vrchat.avatars",
+      "expression": "",
+      "define": "UNITEXT_VRCSDK3"
+    },
+    {
+      "name": "nadena.dev.modular-avatar",
+      "expression": "",
+      "define": "UNITEXT_MA"
+    },
+    {
+      "name": "nadena.dev.ndmf",
+      "expression": "",
+      "define": "UNITEXT_NDMF"
+    }
+  ],
+  "noEngineReferences": false
+}

@@ -1,0 +1,20 @@
+{
+  "name": "UniText.Runtime",
+  "rootNamespace": "UniText",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [
+    {
+      "name": "com.vrchat.avatars",
+      "expression": "",
+      "define": "UNITEXT_VRCSDK3"
+    }
+  ],
+  "noEngineReferences": false
+}
