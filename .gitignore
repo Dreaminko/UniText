@@ -1,0 +1,47 @@
+# Unity generated folders
+unity/Library/
+unity/Temp/
+unity/Obj/
+unity/Build/
+unity/Builds/
+unity/Logs/
+unity/UserSettings/
+unity/MemoryCaptures/
+unity/Recordings/
+unity/.vs/
+unity/*.csproj
+unity/*.sln
+unity/*.suo
+unity/*.tmp
+unity/*.user
+unity/*.userprefs
+unity/*.pidb
+unity/*.booproj
+unity/*.svd
+unity/*.pdb
+unity/*.mdb
+unity/*.opendb
+unity/*.VC.db
+unity/Assets/AssetStoreTools*
+unity/sysinfo.txt
+*.unitypackage
+
+# IMPORTANT: Never ignore .meta files inside the VPM package!
+!unity/Packages/dev.dreaminko.unitext/**/*.meta
+
+# Python & tool caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.cache/
+*.preview.png
+_site/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
