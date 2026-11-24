@@ -29,7 +29,7 @@ UniText enables VRChat PC avatars to display **real-time, shared, multilingual (
 ### Method 2: Offline `.unitypackage` (Fallback)
 
 1. Ensure your Unity `2022.3.22f1` project already has **VRChat SDK - Avatars**, **Modular Avatar** (`>= 1.10.0`), and **NDMF** (`>= 1.5.0`) installed.
-2. Download `UniText-v<version>.unitypackage` from [GitHub Releases](https://github.com/Dreaminko/UniText/releases).
+2. Download `UniText-<version>.unitypackage` from [GitHub Releases](https://github.com/Dreaminko/UniText/releases).
 3. Import it into Unity, open **`UniText → Install to Avatar`** from the top menu bar and drag your Avatar in to install (or manually drag a Prefab from `Packages/dev.dreaminko.unitext/Prefabs/` or `Assets/UniText/Prefabs/` onto your Avatar root), then upload.
 
 ---

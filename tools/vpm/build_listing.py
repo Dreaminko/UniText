@@ -57,7 +57,7 @@ def cmd_pack(args: argparse.Namespace) -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     pkg_id = manifest["name"]
     version = args.version or manifest["version"]
-    tag = args.tag or f"v{version}"
+    tag = args.tag or version
     repo = args.repo
 
     zip_name = f"{pkg_id}-{version}.zip"

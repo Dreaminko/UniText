@@ -12,7 +12,7 @@
   "licensesUrl": "https://github.com/Dreaminko/UniText/blob/main/LICENSE",
   "documentationUrl": "https://github.com/Dreaminko/UniText/blob/main/docs/PROTOCOL.md",
   "changelogUrl": "https://github.com/Dreaminko/UniText/releases",
-  "url": "https://github.com/Dreaminko/UniText/releases/download/v1.2.0/dev.dreaminko.unitext-1.2.0.zip",
+  "url": "https://github.com/Dreaminko/UniText/releases/download/1.2.0/dev.dreaminko.unitext-1.2.0.zip",
   "zipSHA256": "",
   "vpmDependencies": {
     "com.vrchat.avatars": ">=3.7.0",

@@ -20,7 +20,7 @@ namespace UniText.Editor
         public static void ExportUnityPackageMenu()
         {
             string version = ReadPackageVersion();
-            string defaultName = $"UniText-v{version}.unitypackage";
+            string defaultName = $"UniText-{version}.unitypackage";
             string outputPath = EditorUtility.SaveFilePanel(
                 "Export UniText .unitypackage",
                 Path.GetFullPath(Path.Combine(Application.dataPath, "..")),
@@ -42,7 +42,7 @@ namespace UniText.Editor
             UniTextAssetBuilder.BuildAll();
             string version = ReadPackageVersion();
             string projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
-            string outputPath = Path.Combine(projectRoot, "..", "dist", $"UniText-v{version}.unitypackage");
+            string outputPath = Path.Combine(projectRoot, "..", "dist", $"UniText-{version}.unitypackage");
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath) ?? ".");
             ExportToPath(outputPath);
         }
