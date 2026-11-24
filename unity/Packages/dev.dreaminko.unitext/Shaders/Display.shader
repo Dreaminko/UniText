@@ -5,12 +5,12 @@ Shader "UniText/Display"
         _BufferTex ("CRT Buffer (64x32)", 2D) = "black" {}
         _FontAtlas ("Packed Font Atlas (1024xH)", 2D) = "black" {}
         _AuxTex ("Aux Lookup (Block Table + Advances + LUT12, 64x64)", 2D) = "black" {}
-        _BgColor ("Background Color", Color) = (0.04, 0.06, 0.10, 0.84)
-        _BorderColor ("Border Color", Color) = (0.28, 0.38, 0.56, 0.55)
+        _BgColor ("Background Color", Color) = (0.05, 0.065, 0.10, 0.86)
+        _BorderColor ("Border Color", Color) = (0.56, 0.68, 0.88, 0.42)
         _Opacity ("Master Opacity", Range(0.0, 1.0)) = 1.0
-        _CornerRadius ("Corner Radius", Range(0.0, 0.25)) = 0.06
+        _CornerRadius ("Corner Radius", Range(0.0, 0.25)) = 0.085
         _Padding ("Inner Padding", Range(0.01, 0.15)) = 0.045
-        _ShadowStrength ("Text Shadow Strength", Range(0.0, 1.0)) = 0.72
+        _ShadowStrength ("Text Shadow Strength", Range(0.0, 1.0)) = 0.68
         _DisplayRows ("Base Display Rows", Range(4, 12)) = 6
         _RowPx ("Base Logical Row Width (px)", Range(192, 640)) = 384
         [Toggle] _LiveGeometry ("Follow Sender Geometry (CMD_SET_GEOMETRY)", Float) = 0
@@ -162,73 +162,85 @@ Shader "UniText/Display"
                 float aspect = max(i.panelAspect, 0.25);
                 float2 aspectScale = float2(aspect, 1.0);
                 float2 p = (uv - 0.5) * aspectScale;
-                float2 halfSize = 0.5 * aspectScale;
-                float r = clamp(_CornerRadius, 0.001, 0.45);
+                float shadowPad = 0.018;
+                float2 halfSize = max(0.5 * aspectScale - shadowPad, float2(0.05, 0.05));
+                float r = clamp(_CornerRadius, 0.001, min(halfSize.x, halfSize.y));
                 float dist = RoundedBoxSDF(p, halfSize, r);
 
-                float aa = max(fwidth(dist), 0.002);
+                float aa = max(fwidth(dist), 0.0018);
                 float panelMask = 1.0 - smoothstep(-aa, aa, dist);
-                if (panelMask <= 0.001 || _Opacity <= 0.001)
+                float shadowDist = RoundedBoxSDF(p + float2(0.0, 0.003), halfSize, r);
+                float shadowFalloff = saturate(1.0 - max(shadowDist, 0.0) / 0.014);
+                float outerShadow = shadowFalloff * shadowFalloff * 0.34 * _BgColor.a;
+                if ((panelMask <= 0.001 && outerShadow <= 0.001) || _Opacity <= 0.001)
                 {
                     discard;
                 }
 
-                fixed3 col = _BgColor.rgb;
-                float alpha = _BgColor.a * panelMask;
+                // Frosted dark glass surface with subtle vertical depth and top ambient sheen
+                float cardU = saturate((p.x / max(halfSize.x, 1e-4)) * 0.5 + 0.5);
+                float cardV = saturate((p.y / max(halfSize.y, 1e-4)) * 0.5 + 0.5);
+                fixed3 bgCol = _BgColor.rgb * lerp(0.84, 1.20, cardV);
+                float topSheen = 0.045 * pow(cardV, 3.0) * (1.0 - 0.40 * abs(cardU - 0.5));
+                bgCol = lerp(bgCol, _BorderColor.rgb, topSheen * _BorderColor.a);
+                float bgAlpha = _BgColor.a * panelMask;
+                float outShadowVis = outerShadow * (1.0 - panelMask);
+                float alpha = bgAlpha + outShadowVis;
+                fixed3 col = (alpha > 1e-4) ? (bgCol * bgAlpha / alpha) : fixed3(0.0, 0.0, 0.0);
 
-                // Subtle rounded border
-                float borderWidth = 0.02;
-                float borderMask = (1.0 - smoothstep(0.0, aa, abs(dist + borderWidth * 0.5) - borderWidth * 0.5)) * panelMask;
-                col = lerp(col, _BorderColor.rgb, borderMask * _BorderColor.a);
-                alpha = max(alpha, borderMask * _BorderColor.a);
+                // Crisp glass rim border with active-only status breathing accent (no corner dot)
+                float borderWidth = 0.0085;
+                float borderMask = (1.0 - smoothstep(-aa, aa, abs(dist + borderWidth * 0.5) - borderWidth * 0.5)) * panelMask;
+                float rimLight = lerp(0.75, 1.35, pow(cardV, 2.0));
+                fixed3 borderRgb = _BorderColor.rgb * rimLight;
+                float borderAlpha = saturate(_BorderColor.a * lerp(0.85, 1.15, cardV));
+
+                uint status = (uint)clamp(round(i.geo.w), 0.0, 15.0);
+                if (status == 1u || status == 2u)
+                {
+                    fixed3 statusColor = (status == 1u) ? UniTextGetPaletteColor(7u) : UniTextGetPaletteColor(4u);
+                    float pulse = 0.55 + 0.45 * sin(_Time.y * ((status == 1u) ? 4.0 : 6.0));
+                    float statusWeight = lerp(0.28, 0.78, pow(cardV, 1.5)) * pulse;
+                    borderRgb = lerp(borderRgb, statusColor * 1.15, statusWeight);
+                    borderAlpha = max(borderAlpha, 0.55 * statusWeight);
+                }
+
+                float borderBlend = borderMask * borderAlpha;
+                col = lerp(col, borderRgb, borderBlend);
+                alpha = max(alpha, borderBlend);
 
                 uint activeRows = (uint)clamp(round(i.geo.x), 4.0, (float)UNITEXT_MAX_ROWS);
                 float rowPx = clamp(round(i.geo.y), 192.0, 640.0);
 
-                // Global status indicator dot in top-right corner margin (physical margin invariant under W/H resize)
-                float padY = clamp(_Padding * 1.4 * (6.0 / (float)activeRows), 0.02, 0.10);
-                float padX = clamp(_Padding * (384.0 / rowPx), 0.015, 0.07);
-                uint status = (uint)clamp(round(i.geo.w), 0.0, 15.0);
-                float2 dotPos = float2(1.0 - padX * 0.45, 1.0 - padY * 0.55);
-                float dotDist = length((uv - dotPos) * aspectScale);
-                float dotRadius = 0.018;
-                float dotMask = 1.0 - smoothstep(dotRadius - aa, dotRadius + aa, dotDist);
-                if (dotMask > 0.001)
-                {
-                    fixed3 dotColor = UniTextGetPaletteColor(14u); // Idle: muted slate
-                    float pulse = 0.55;
-                    if (status == 1u) // Listening
-                    {
-                        dotColor = UniTextGetPaletteColor(7u); // Aqua Teal
-                        pulse = 0.55 + 0.45 * sin(_Time.y * 5.0);
-                    }
-                    else if (status == 2u) // Translating
-                    {
-                        dotColor = UniTextGetPaletteColor(4u); // Warm Amber
-                        pulse = 0.55 + 0.45 * sin(_Time.y * 7.5);
-                    }
-                    col = lerp(col, dotColor * (0.65 + 0.55 * pulse), dotMask);
-                    alpha = max(alpha, dotMask * 0.95);
-                }
-
-                // Inner text region: configurable row count (4..12) and proportional row width (192..640 px)
+                // Inner text region: balanced physical padding across aspect ratios (4..12 rows, 192..640 px)
+                float physPadY = clamp(_Padding * 1.35 * (6.0 / (float)activeRows), 0.032, 0.105);
+                float physPadX = clamp(physPadY * 1.35, 0.045, 0.145);
+                float padY = clamp(shadowPad + physPadY, 0.04, 0.14);
+                float padX = clamp((shadowPad + physPadX) / aspect, 0.018, 0.10);
                 float2 pad = float2(padX, padY);
                 float2 gridUV = (uv - pad) / max(1.0 - 2.0 * pad, float2(0.001, 0.001));
+                float innerWidth = aspect * (1.0 - 2.0 * padX);
+                float innerHeight = 1.0 - 2.0 * padY;
                 if (_KeepGlyphAspect > 0.5)
                 {
-                    float innerAspect = aspect * (1.0 - 2.0 * padX) / max(1.0 - 2.0 * padY, 0.001);
+                    float innerAspect = innerWidth / max(innerHeight, 0.001);
                     float targetAspect = rowPx / (16.0 * (float)activeRows);
                     float ratio = innerAspect / max(targetAspect, 0.01);
                     if (ratio > 1.35)
                     {
-                        gridUV.x = (gridUV.x - 0.5) * (ratio / 1.35) + 0.5;
+                        float scaleX = ratio / 1.35;
+                        gridUV.x = (gridUV.x - 0.5) * scaleX + 0.5;
+                        innerWidth /= scaleX;
                     }
                     else if (ratio < 0.70)
                     {
-                        gridUV.y = (gridUV.y - 0.5) * (0.70 / ratio) + 0.5;
+                        float scaleY = 0.70 / ratio;
+                        gridUV.y = (gridUV.y - 0.5) * scaleY + 0.5;
+                        innerHeight /= scaleY;
                     }
                 }
-                if (gridUV.x >= 0.0 && gridUV.x < 1.0 && gridUV.y >= 0.0 && gridUV.y < 1.0)
+                float rowPadU = min(physPadX * 0.22, 0.020) / max(innerWidth, 0.001);
+                if (gridUV.x >= -rowPadU && gridUV.x < 1.0 + rowPadU && gridUV.y >= 0.0 && gridUV.y < 1.0)
                 {
                     // Top-down row index (row 0 = top, row activeRows - 1 = bottom)
                     float topV = 1.0 - gridUV.y;
@@ -248,75 +260,89 @@ Shader "UniText/Display"
 
                     if (isHighlight)
                     {
-                        col = lerp(col, rowColor * 0.24, 0.35);
+                        float rowH = innerHeight / (float)activeRows;
+                        float rowFullW = innerWidth * (1.0 + 2.0 * rowPadU);
+                        float rowLocalX = (gridUV.x - 0.5) * innerWidth;
+                        float rowLocalY = (frac(fRow) - 0.5) * rowH;
+
+                        float2 rowHalf = float2(rowFullW * 0.5, rowH * 0.44);
+                        float rowR = min(rowH * 0.24, 0.024);
+                        float rowDist = RoundedBoxSDF(float2(rowLocalX, rowLocalY), rowHalf, rowR);
+                        float rowMask = (1.0 - smoothstep(-aa, aa, rowDist)) * panelMask;
+                        float pillFade = lerp(1.0, 0.40, saturate(gridUV.x));
+                        col = lerp(col, rowColor * 0.26, rowMask * 0.34 * pillFade);
                     }
 
-                    uint penX = (uint)clamp(floor(gridUV.x * rowPx), 0.0, rowPx - 1.0);
-                    if (penX < rowMaxPx)
+                    if (gridUV.x >= 0.0 && gridUV.x < 1.0)
                     {
-                        // Binary search the CRT layout row for the last cell whose xStart <= pixel X,
-                        // tracking (xStart, advance) inline to avoid a redundant post-loop lookup.
-                        uint lo = 0u;
-                        uint hi = UNITEXT_COLS - 1u;
-                        uint xStart = 0u;
-                        uint advance = 0u;
-                        [unroll]
-                        for (uint iter = 0u; iter < 6u; iter++)
+                        uint penX = (uint)clamp(floor(gridUV.x * rowPx), 0.0, rowPx - 1.0);
+                        if (penX < rowMaxPx)
                         {
-                            uint mid = (lo + hi + 1u) >> 1;
-                            uint midX = 0u;
-                            uint midAdv = 0u;
-                            UniTextSampleLayout(_BufferTex, mid, physRow, midX, midAdv);
-                            if (midX <= penX)
+                            // Binary search the CRT layout row for the last cell whose xStart <= pixel X,
+                            // tracking (xStart, advance) inline to avoid a redundant post-loop lookup.
+                            uint lo = 0u;
+                            uint hi = UNITEXT_COLS - 1u;
+                            uint xStart = 0u;
+                            uint advance = 0u;
+                            [unroll]
+                            for (uint iter = 0u; iter < 6u; iter++)
                             {
-                                lo = mid;
-                                xStart = midX;
-                                advance = midAdv;
-                            }
-                            else
-                            {
-                                hi = mid - 1u;
-                                if (mid == 1u)
+                                uint mid = (lo + hi + 1u) >> 1;
+                                uint midX = 0u;
+                                uint midAdv = 0u;
+                                UniTextSampleLayout(_BufferTex, mid, physRow, midX, midAdv);
+                                if (midX <= penX)
                                 {
-                                    advance = midX;
+                                    lo = mid;
+                                    xStart = midX;
+                                    advance = midAdv;
+                                }
+                                else
+                                {
+                                    hi = mid - 1u;
+                                    if (mid == 1u)
+                                    {
+                                        advance = midX;
+                                    }
                                 }
                             }
-                        }
 
-                        uint cp = (penX >= xStart && penX < xStart + advance) ? UniTextSampleCell(_BufferTex, lo, physRow) : 0u;
-                        if (cp != 0u)
-                        {
-                            uint gx = penX - xStart;
-                            uint gy = (uint)clamp(floor(frac(fRow) * 16.0), 0.0, 15.0);
-
-                            UniTextGlyphRef glyphRef = UniTextGetGlyphRef(_AuxTex, cp);
-                            float atlasHeight = max(_FontAtlas_TexelSize.w, 1.0);
-                            float glyph = 0.0;
-                            float shadow = 0.0;
-                            UniTextSampleGlyphAndShadow(
-                                _FontAtlas,
-                                atlasHeight,
-                                glyphRef,
-                                gx,
-                                gy,
-                                _ShadowStrength > 0.001,
-                                glyph,
-                                shadow
-                            );
-
-                            // Subtle 1-pixel shadow offset (right-down) for readability against bright scenes
-                            if (shadow > 0.5 && glyph < 0.5)
+                            uint cp = (penX >= xStart && penX < xStart + advance) ? UniTextSampleCell(_BufferTex, lo, physRow) : 0u;
+                            if (cp != 0u)
                             {
-                                col = lerp(col, fixed3(0.0, 0.0, 0.0), _ShadowStrength * 0.8);
-                                alpha = max(alpha, 0.92 * _ShadowStrength);
-                            }
+                                uint gx = penX - xStart;
+                                uint gy = (uint)clamp(floor(frac(fRow) * 16.0), 0.0, 15.0);
 
-                            if (glyph > 0.5)
-                            {
-                                float brightness = isDim ? 0.58 : (isHighlight ? 1.12 : 1.0);
-                                float textAlpha = isDim ? 0.78 : 1.0;
-                                col = lerp(col, rowColor * brightness, textAlpha);
-                                alpha = max(alpha, textAlpha);
+                                UniTextGlyphRef glyphRef = UniTextGetGlyphRef(_AuxTex, cp);
+                                float atlasHeight = max(_FontAtlas_TexelSize.w, 1.0);
+                                float glyph = 0.0;
+                                float shadow = 0.0;
+                                UniTextSampleGlyphAndShadow(
+                                    _FontAtlas,
+                                    atlasHeight,
+                                    glyphRef,
+                                    gx,
+                                    gy,
+                                    _ShadowStrength > 0.001,
+                                    glyph,
+                                    shadow
+                                );
+
+                                // Subtle 1-pixel shadow offset (right-down) for readability against bright scenes
+                                if (shadow > 0.5 && glyph < 0.5)
+                                {
+                                    float shadowAmt = _ShadowStrength * (isDim ? 0.50 : 0.80);
+                                    col = lerp(col, fixed3(0.0, 0.0, 0.0), shadowAmt);
+                                    alpha = max(alpha, (isDim ? 0.55 : 0.92) * _ShadowStrength);
+                                }
+
+                                if (glyph > 0.5)
+                                {
+                                    float brightness = isDim ? 0.62 : (isHighlight ? 1.12 : 1.0);
+                                    float textAlpha = isDim ? 0.80 : 1.0;
+                                    col = lerp(col, rowColor * brightness, textAlpha);
+                                    alpha = max(alpha, textAlpha);
+                                }
                             }
                         }
                     }

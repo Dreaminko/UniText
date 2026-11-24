@@ -30,15 +30,6 @@ namespace UniText.Editor
         private const string StandardPrefabGuid = "e7a100054d9c40008000000000000003";
         private const string TurboPrefabGuid = "e7a100054d9c40008000000000000004";
 
-        private static readonly UniTextTier[] TierDisplayOrder =
-        {
-            UniTextTier.Lite,
-            UniTextTier.Compact,
-            UniTextTier.Balanced,
-            UniTextTier.Standard,
-            UniTextTier.Turbo
-        };
-
         [SerializeField] private GameObject _rawTargetObject;
         [SerializeField] private UniTextTier _tier = UniTextTier.Standard;
         [SerializeField] private bool _useBoneProxy = true;
@@ -71,6 +62,11 @@ namespace UniText.Editor
         private GUIStyle _dropMainLabelStyle;
         private GUIStyle _dropSubLabelStyle;
         private GUIStyle _primaryButtonStyle;
+        private GUIStyle _selectedButtonStyle;
+        private GUIStyle _selectedMiniButtonStyle;
+        private GUIStyle _barLabelStyle;
+        private GUIStyle _dirtyLabelStyle;
+        private GUIStyle _previewCaptionStyle;
 
         [MenuItem("UniText/Install to Avatar", priority = 0)]
         private static void OpenFromTopMenu()
@@ -128,7 +124,8 @@ namespace UniText.Editor
             {
                 _titleStyle = new GUIStyle(EditorStyles.boldLabel)
                 {
-                    fontSize = 15
+                    fontSize = 15,
+                    alignment = TextAnchor.MiddleLeft
                 };
             }
 
@@ -175,6 +172,54 @@ namespace UniText.Editor
                     fontSize = 12
                 };
             }
+
+            if (_selectedButtonStyle == null)
+            {
+                _selectedButtonStyle = new GUIStyle(GUI.skin.button)
+                {
+                    fontStyle = FontStyle.Bold
+                };
+            }
+
+            if (_selectedMiniButtonStyle == null)
+            {
+                _selectedMiniButtonStyle = new GUIStyle(EditorStyles.miniButton)
+                {
+                    fontStyle = FontStyle.Bold
+                };
+            }
+
+            if (_barLabelStyle == null)
+            {
+                _barLabelStyle = new GUIStyle(EditorStyles.boldLabel)
+                {
+                    alignment = TextAnchor.MiddleCenter,
+                    fontSize = 11
+                };
+                _barLabelStyle.normal.textColor = Color.white;
+            }
+
+            if (_dirtyLabelStyle == null)
+            {
+                _dirtyLabelStyle = new GUIStyle(EditorStyles.miniBoldLabel);
+                _dirtyLabelStyle.normal.textColor = EditorGUIUtility.isProSkin
+                    ? new Color(1.0f, 0.78f, 0.32f, 1f)
+                    : new Color(0.72f, 0.42f, 0.0f, 1f);
+            }
+
+            if (_previewCaptionStyle == null)
+            {
+                _previewCaptionStyle = new GUIStyle(EditorStyles.centeredGreyMiniLabel)
+                {
+                    fontSize = 10
+                };
+            }
+        }
+
+        private void ClearStatusMessage()
+        {
+            _statusMessage = null;
+            _statusMessageType = MessageType.None;
         }
 
         private void TryAutoSelectFromHierarchy()
@@ -200,8 +245,7 @@ namespace UniText.Editor
         private void SetTargetObject(GameObject target)
         {
             _rawTargetObject = target;
-            _statusMessage = null;
-            _statusMessageType = MessageType.None;
+            ClearStatusMessage();
 
             if (target == null)
             {
@@ -282,20 +326,42 @@ namespace UniText.Editor
 
             VRCAvatarDescriptor descriptor = DrawTargetAvatarSection();
 
+            EditorGUI.BeginChangeCheck();
+
             EditorGUILayout.Space(8f);
             DrawTierSection();
 
-            UniTextParameterChecker.AvatarBudgetSummary budgetSummary = default(UniTextParameterChecker.AvatarBudgetSummary);
-            int projectedTotal = 0;
-            if (descriptor != null)
-            {
-                EditorGUILayout.Space(8f);
-                budgetSummary = UniTextParameterChecker.AnalyzeAvatar(descriptor);
-                DrawBudgetSection(budgetSummary, out projectedTotal);
-            }
+            UniTextParameterChecker.AvatarBudgetSummary budgetSummary = descriptor != null
+                ? UniTextParameterChecker.AnalyzeAvatar(descriptor)
+                : default(UniTextParameterChecker.AvatarBudgetSummary);
+
+            UniTextParameterChecker.ProjectWithUniText(
+                budgetSummary,
+                _tier,
+                _syncWorldDrop,
+                out int addedBits,
+                out int projectedTotal,
+                _syncWideRows,
+                _displayRows > 6,
+                _allowRuntimeResize
+            );
+
+            EditorGUILayout.Space(8f);
+            DrawBudgetSection(descriptor, budgetSummary, addedBits, projectedTotal);
 
             EditorGUILayout.Space(8f);
             DrawConfigurationSection();
+
+            EditorGUILayout.Space(8f);
+            DrawViewportSection();
+
+            EditorGUILayout.Space(8f);
+            DrawAdvancedSection();
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                ClearStatusMessage();
+            }
 
             GameObject tierPrefab = LoadTierPrefab(_tier);
             DrawDiagnosticsSection(descriptor, tierPrefab);
@@ -303,23 +369,20 @@ namespace UniText.Editor
             EditorGUILayout.Space(6f);
             EditorGUILayout.EndScrollView();
 
-            DrawFooterActions(descriptor, budgetSummary, tierPrefab, projectedTotal);
+            DrawStatusBanner();
+            DrawFooterActions(descriptor, budgetSummary, tierPrefab, addedBits, projectedTotal);
         }
 
         private void DrawHeader()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.BeginVertical();
-            GUILayout.Label(L("UniText Avatar 安装向导", "UniText Avatar Installer"), _titleStyle);
             GUILayout.Label(
-                L(
-                    "无损安装（NDMF + Modular Avatar）：拖入场景中的 Avatar 后点击安装即可自动应用。",
-                    "Non-destructive setup (NDMF + Modular Avatar): drop a scene Avatar and click Install."
-                ),
-                _subtitleStyle
+                L("UniText Avatar 安装向导", "UniText Avatar Installer"),
+                _titleStyle,
+                GUILayout.ExpandWidth(true),
+                GUILayout.Height(24f)
             );
-            EditorGUILayout.EndVertical();
 
             if (GUILayout.Button(_isChinese ? "EN" : "中文", GUILayout.Width(44f), GUILayout.Height(24f)))
             {
@@ -348,6 +411,8 @@ namespace UniText.Editor
 
             EditorGUILayout.Space(4f);
             EditorGUILayout.BeginHorizontal();
+            float prevLabelWidth = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = _isChinese ? 60f : 50f;
             EditorGUI.BeginChangeCheck();
             GameObject picked = (GameObject)EditorGUILayout.ObjectField(
                 L("目标对象", "Target"),
@@ -360,6 +425,7 @@ namespace UniText.Editor
                 SetTargetObject(picked);
                 resolvedDescriptor = ResolveValidDescriptor();
             }
+            EditorGUIUtility.labelWidth = prevLabelWidth;
 
             GUI.enabled = Selection.activeGameObject != null;
             if (GUILayout.Button(L("使用选中", "Use Selected"), GUILayout.Width(82f)))
@@ -450,7 +516,9 @@ namespace UniText.Editor
 
         private void DrawAvatarDropZone(VRCAvatarDescriptor resolvedDescriptor)
         {
-            Rect dropRect = GUILayoutUtility.GetRect(0f, 68f, GUILayout.ExpandWidth(true));
+            bool isReady = resolvedDescriptor != null;
+            float zoneHeight = isReady ? 44f : 62f;
+            Rect dropRect = GUILayoutUtility.GetRect(0f, zoneHeight, GUILayout.ExpandWidth(true));
             Event evt = Event.current;
             bool isHovered = dropRect.Contains(evt.mousePosition);
             bool isDragging = evt.type == EventType.DragUpdated || evt.type == EventType.DragPerform;
@@ -478,7 +546,7 @@ namespace UniText.Editor
                 bgColor = new Color(0.18f, 0.44f, 0.72f, 0.28f);
                 borderColor = new Color(0.32f, 0.72f, 1.0f, 0.95f);
             }
-            else if (resolvedDescriptor != null)
+            else if (isReady)
             {
                 bgColor = new Color(0.16f, 0.56f, 0.30f, 0.18f);
                 borderColor = new Color(0.28f, 0.78f, 0.44f, 0.85f);
@@ -501,15 +569,19 @@ namespace UniText.Editor
             EditorGUI.DrawRect(dropRect, bgColor);
             DrawRectOutline(dropRect, borderColor, 1.5f);
 
-            Rect mainLabelRect = new Rect(dropRect.x + 10f, dropRect.y + 10f, dropRect.width - 20f, 26f);
-            Rect subLabelRect = new Rect(dropRect.x + 10f, dropRect.y + 36f, dropRect.width - 20f, 24f);
+            Rect mainLabelRect = isReady
+                ? new Rect(dropRect.x + 10f, dropRect.y + 4f, dropRect.width - 20f, 20f)
+                : new Rect(dropRect.x + 10f, dropRect.y + 9f, dropRect.width - 20f, 24f);
+            Rect subLabelRect = isReady
+                ? new Rect(dropRect.x + 10f, dropRect.y + 23f, dropRect.width - 20f, 16f)
+                : new Rect(dropRect.x + 10f, dropRect.y + 33f, dropRect.width - 20f, 22f);
 
             if (isHovered && isDragging && draggedGo != null)
             {
                 GUI.Label(mainLabelRect, L($"松开鼠标以选择: {draggedGo.name}", $"Drop to select: {draggedGo.name}"), _dropMainLabelStyle);
                 GUI.Label(subLabelRect, L("将自动识别所属的 VRCAvatarDescriptor 根节点", "Will automatically resolve parent VRCAvatarDescriptor"), _dropSubLabelStyle);
             }
-            else if (resolvedDescriptor != null)
+            else if (isReady)
             {
                 GUI.Label(mainLabelRect, L($"✓ 已就绪: {resolvedDescriptor.gameObject.name}", $"✓ Ready: {resolvedDescriptor.gameObject.name}"), _dropMainLabelStyle);
                 GUI.Label(subLabelRect, L("可拖入其他 Avatar 替换目标", "Drag another Hierarchy Avatar here to switch target"), _dropSubLabelStyle);
@@ -524,182 +596,259 @@ namespace UniText.Editor
         private void DrawTierSection()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label(L("2. 带宽档位 (Parameter Tier)", "2. Bandwidth Tier"), _sectionHeaderStyle);
+            GUILayout.Label(L("2. 带宽档位", "2. Bandwidth Tier"), _sectionHeaderStyle);
             EditorGUILayout.Space(4f);
 
-            string[] labels =
-            {
-                "Lite (33b)",
-                "Compact (45b)",
-                "Balanced (57b)",
-                "Standard (73b)",
-                "Turbo (137b)"
-            };
-            int selectedIndex = Array.IndexOf(TierDisplayOrder, _tier);
-            if (selectedIndex < 0)
-            {
-                selectedIndex = 3; // Standard
-            }
-            int nextIndex = GUILayout.SelectionGrid(selectedIndex, labels, 3, GUILayout.Height(48f));
-            if (nextIndex >= 0 && nextIndex < TierDisplayOrder.Length && nextIndex != selectedIndex)
-            {
-                _tier = TierDisplayOrder[nextIndex];
-            }
+            EditorGUILayout.BeginHorizontal();
+            DrawTierButton(UniTextTier.Lite, "Lite (33b)");
+            DrawTierButton(UniTextTier.Compact, "Compact (45b)");
+            DrawTierButton(UniTextTier.Balanced, "Balanced (57b)");
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(2f);
+            EditorGUILayout.BeginHorizontal();
+            DrawTierButton(UniTextTier.Standard, "Standard (73b) ★");
+            DrawTierButton(UniTextTier.Turbo, "Turbo (137b)");
+            EditorGUILayout.EndHorizontal();
 
             string tierSummary;
             switch (_tier)
             {
                 case UniTextTier.Lite:
                     tierSummary = L(
-                        "3 字节负载 (D0..D2) · LUT12 每包 2 汉字 / Ring-Buffer 滚屏 · 极低参数占用 (33b)",
-                        "3 payload bytes (D0..D2) · 2 LUT12 CJK / 3 ASCII per packet + Ring-Buffer scroll · Ultra-low 33b cost"
+                        "基础 33b · 每包 2 汉字 / 3 英文 · 极低参数占用，适合参数预算非常紧张的模型",
+                        "Base 33b · 2 CJK / 3 Latin per packet · Ultra-low cost for very tight budgets"
                     );
                     break;
                 case UniTextTier.Compact:
                     tierSummary = L(
-                        "36 bit 负载 (D0..D3 + D4 高 4 位 Bool) · LUT12 每包 3 汉字 / 4 ASCII · 适合参数预算紧张的模型",
-                        "36 payload bits (D0..D3 + 4 Bool nibble bits) · 3 LUT12 CJK / 4 ASCII per packet · Tight budgets"
+                        "基础 45b · 每包 3 汉字 / 4 英文 · 低参数占用，兼顾预算紧张与刷新速度",
+                        "Base 45b · 3 CJK / 4 Latin per packet · Low cost with faster refresh than Lite"
                     );
                     break;
                 case UniTextTier.Balanced:
                     tierSummary = L(
-                        "6 字节负载 (D0..D5) · LUT12 每包 4 汉字（等效原 73b）/ 6 ASCII · 省 16b 推荐均衡档",
-                        "6 payload bytes (D0..D5) · 4 LUT12 CJK (matches 73b Standard) / 6 ASCII · Saves 16 synced bits"
+                        "基础 57b · 每包 4 汉字 / 6 英文 · 均衡省参，比 Standard 节省 16b 且流畅度接近",
+                        "Base 57b · 4 CJK / 6 Latin per packet · Balanced cost, saves 16b vs Standard"
                     );
                     break;
                 case UniTextTier.Turbo:
                     tierSummary = L(
-                        "16 字节负载 (D0..D15) · LUT12 每包 10 汉字 / 16 ASCII · 最低字幕延迟",
-                        "16 payload bytes (D0..D15) · 10 LUT12 CJK / 16 ASCII chars per packet · Lowest latency"
+                        "基础 137b · 每包 10 汉字 / 16 英文 · 极速刷新最低延迟，适合参数余量充足的模型",
+                        "Base 137b · 10 CJK / 16 Latin per packet · Fastest refresh for avatars with ample budget"
                     );
                     break;
                 default:
                     tierSummary = L(
-                        "8 字节负载 (D0..D7) · LUT12 每包 5 汉字 / 8 ASCII · 推荐默认档位",
-                        "8 payload bytes (D0..D7) · 5 LUT12 CJK / 8 ASCII chars per packet · Recommended default"
+                        "基础 73b · 每包 5 汉字 / 8 英文 · 推荐默认档位，刷新流畅且参数占用适中",
+                        "Base 73b · 5 CJK / 8 Latin per packet · Recommended default with smooth refresh"
                     );
                     break;
             }
 
-            EditorGUILayout.Space(2f);
+            EditorGUILayout.Space(4f);
             EditorGUILayout.LabelField(tierSummary, _subtitleStyle);
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawBudgetSection(UniTextParameterChecker.AvatarBudgetSummary budgetSummary, out int projectedTotal)
+        private void DrawTierButton(UniTextTier tier, string label)
+        {
+            bool isSelected = _tier == tier;
+            Color prevBg = GUI.backgroundColor;
+            if (isSelected)
+            {
+                GUI.backgroundColor = new Color(0.45f, 0.78f, 1.0f, 1.0f);
+            }
+
+            GUIStyle style = isSelected ? _selectedButtonStyle : GUI.skin.button;
+            if (GUILayout.Button(label, style, GUILayout.Height(24f), GUILayout.ExpandWidth(true)))
+            {
+                if (_tier != tier)
+                {
+                    _tier = tier;
+                    ClearStatusMessage();
+                }
+            }
+
+            GUI.backgroundColor = prevBg;
+        }
+
+        private void DrawBudgetSection(
+            VRCAvatarDescriptor descriptor,
+            UniTextParameterChecker.AvatarBudgetSummary budgetSummary,
+            int addedBits,
+            int projectedTotal)
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label(L("3. 同步参数预算预览", "3. Synced Parameter Budget"), _sectionHeaderStyle);
+            GUILayout.Label(L("3. 同步参数预算", "3. Synced Parameter Budget"), _sectionHeaderStyle);
             EditorGUILayout.Space(4f);
 
-            UniTextParameterChecker.ProjectWithUniText(
-                budgetSummary,
-                _tier,
-                _syncWorldDrop,
-                out int addedBits,
-                out projectedTotal,
-                _syncWideRows,
-                _displayRows > 6,
-                _allowRuntimeResize
-            );
-
             int maxBits = UniTextParameterChecker.MaxSyncedBits;
+            int baseBits = descriptor != null ? budgetSummary.BaseUsedBits : 0;
             int remaining = Mathf.Max(0, maxBits - projectedTotal);
 
-            Rect barRect = EditorGUILayout.GetControlRect(false, 20f);
-            Color prevColor = GUI.color;
+            Color baseColor = new Color(0.28f, 0.46f, 0.70f, 1f);
+            Color uniTextColor;
             if (projectedTotal > maxBits)
             {
-                GUI.color = new Color(1.0f, 0.45f, 0.45f, 1.0f);
+                uniTextColor = new Color(0.82f, 0.28f, 0.28f, 1f);
             }
             else if (projectedTotal > 200)
             {
-                GUI.color = new Color(1.0f, 0.85f, 0.40f, 1.0f);
+                uniTextColor = new Color(0.82f, 0.60f, 0.16f, 1f);
             }
             else
             {
-                GUI.color = new Color(0.55f, 0.95f, 0.65f, 1.0f);
+                uniTextColor = new Color(0.22f, 0.66f, 0.38f, 1f);
             }
 
-            EditorGUI.ProgressBar(
-                barRect,
-                Mathf.Clamp01((float)projectedTotal / maxBits),
-                $"{projectedTotal} / {maxBits} bits"
-            );
-            GUI.color = prevColor;
+            Rect barRect = EditorGUILayout.GetControlRect(false, 20f);
+            DrawSegmentedBudgetBar(barRect, baseBits, projectedTotal, addedBits, maxBits, descriptor != null, baseColor, uniTextColor);
 
-            EditorGUILayout.Space(2f);
-            EditorGUILayout.LabelField(
-                L(
-                    $"原模型已用: {budgetSummary.BaseUsedBits}b  +  UniText: {addedBits}b  =  预计总计: {projectedTotal}b（剩余: {remaining}b）",
-                    $"Base Avatar: {budgetSummary.BaseUsedBits}b  +  UniText: {addedBits}b  =  Projected: {projectedTotal}b (Remaining: {remaining}b)"
-                ),
-                EditorStyles.miniLabel
-            );
-
-            if (projectedTotal > maxBits)
+            EditorGUILayout.Space(3f);
+            if (descriptor != null)
             {
-                int overBits = projectedTotal - maxBits;
-                int currentBits = UniTextParameterChecker.GetPayloadBits(_tier);
+                EditorGUILayout.BeginHorizontal();
+                DrawColorSwatch(baseColor);
+                GUILayout.Label(L($"原模型 {baseBits}b", $"Base {baseBits}b"), EditorStyles.miniLabel, GUILayout.ExpandWidth(false));
+                GUILayout.Label("+", EditorStyles.miniLabel, GUILayout.ExpandWidth(false));
+                DrawColorSwatch(uniTextColor);
+                GUILayout.Label($"UniText {addedBits}b", EditorStyles.miniLabel, GUILayout.ExpandWidth(false));
+                GUILayout.Label(
+                    L($"= 预计总计 {projectedTotal}b（剩余 {remaining}b）", $"= Projected {projectedTotal}b (Left {remaining}b)"),
+                    EditorStyles.miniLabel,
+                    GUILayout.ExpandWidth(true)
+                );
+                EditorGUILayout.EndHorizontal();
 
-                UniTextTier? suggestedTier = null;
-                UniTextTier[] fallbackOrder =
+                if (projectedTotal > maxBits)
                 {
-                    UniTextTier.Standard,
-                    UniTextTier.Balanced,
-                    UniTextTier.Compact,
-                    UniTextTier.Lite
-                };
-                foreach (UniTextTier candidate in fallbackOrder)
-                {
-                    if (UniTextParameterChecker.GetPayloadBits(candidate) >= currentBits)
+                    int overBits = projectedTotal - maxBits;
+                    int currentBits = UniTextParameterChecker.GetPayloadBits(_tier);
+
+                    UniTextTier? suggestedTier = null;
+                    UniTextTier[] fallbackOrder =
                     {
-                        continue;
-                    }
-                    UniTextParameterChecker.ProjectWithUniText(budgetSummary, candidate, _syncWorldDrop, out _, out int candidateTotal, _syncWideRows, _displayRows > 6, _allowRuntimeResize);
-                    if (candidateTotal <= maxBits)
+                        UniTextTier.Standard,
+                        UniTextTier.Balanced,
+                        UniTextTier.Compact,
+                        UniTextTier.Lite
+                    };
+                    foreach (UniTextTier candidate in fallbackOrder)
                     {
-                        suggestedTier = candidate;
-                        break;
+                        if (UniTextParameterChecker.GetPayloadBits(candidate) >= currentBits)
+                        {
+                            continue;
+                        }
+                        UniTextParameterChecker.ProjectWithUniText(budgetSummary, candidate, _syncWorldDrop, out _, out int candidateTotal, _syncWideRows, _displayRows > 6, _allowRuntimeResize);
+                        if (candidateTotal <= maxBits)
+                        {
+                            suggestedTier = candidate;
+                            break;
+                        }
                     }
-                }
 
-                UniTextParameterChecker.ProjectWithUniText(budgetSummary, UniTextTier.Lite, false, out _, out int liteLocalWd, false, false, false);
+                    UniTextParameterChecker.ProjectWithUniText(budgetSummary, UniTextTier.Lite, false, out _, out int liteLocalWd, false, false, false);
 
-                string suggestion;
-                if (suggestedTier.HasValue)
-                {
-                    GetTierMetadata(suggestedTier.Value, out _, out _, out string suggestedLabel);
-                    suggestion = L(
-                        $"建议切换到 {suggestedLabel} 档位即可适配当前 Avatar。",
-                        $"Suggestion: switch to {suggestedLabel} tier to fit within budget."
+                    string suggestion;
+                    if (suggestedTier.HasValue)
+                    {
+                        GetTierMetadata(suggestedTier.Value, out _, out _, out string suggestedLabel);
+                        suggestion = L(
+                            $"建议切换到 {suggestedLabel} 档位即可适配当前 Avatar。",
+                            $"Suggestion: switch to {suggestedLabel} tier to fit within budget."
+                        );
+                    }
+                    else if (liteLocalWd <= maxBits)
+                    {
+                        suggestion = L(
+                            "建议切换到 Lite (33b) 档位，并关闭“游戏内实时调宽高 (+1b)”、“同步世界固定 (+1b)”或“宽行模式 (+1b)”。",
+                            "Suggestion: switch to Lite (33b) tier and disable 'Allow In-Game Live Resize (+1b)', 'Sync World Drop (+1b)', or 'Wide Rows (+1b)'."
+                        );
+                    }
+                    else
+                    {
+                        suggestion = L(
+                            "请清理未使用的 Expression 参数，或用 VRCFury Parameter Compressor / Modular Avatar 压缩 Avatar 自身的静态菜单开关与滑块。",
+                            "Consider freeing unused synced parameters, or compressing the Avatar's static menu toggles/sliders with VRCFury Parameter Compressor."
+                        );
+                    }
+
+                    EditorGUILayout.HelpBox(
+                        L(
+                            $"预计超出 VRChat {maxBits}b 上限 {overBits}b。\n{suggestion}",
+                            $"Projected usage exceeds VRChat's {maxBits}b limit by {overBits}b.\n{suggestion}"
+                        ),
+                        MessageType.Warning
                     );
                 }
-                else if (liteLocalWd <= maxBits)
-                {
-                    suggestion = L(
-                        "建议切换到 Lite (33b) 档位，并关闭“游戏内实时调宽高 (+1b)”、“同步世界固定 (+1b)”或“宽行模式 (+1b)”。",
-                        "Suggestion: switch to Lite (33b) tier and disable 'Allow In-Game Resize (+1b)', 'Sync World Drop (+1b)', or 'Wide Rows (+1b)'."
-                    );
-                }
-                else
-                {
-                    suggestion = L(
-                        "请清理未使用的 Expression 参数，或用 VRCFury Parameter Compressor / Modular Avatar 压缩 Avatar 自身的静态菜单开关与滑块。",
-                        "Consider freeing unused synced parameters, or compressing the Avatar's static menu toggles/sliders with VRCFury Parameter Compressor."
-                    );
-                }
-
-                EditorGUILayout.HelpBox(
+            }
+            else
+            {
+                int baseTierBits = UniTextProp.GetBaseSyncedBits(_tier);
+                int optBits = Mathf.Max(0, addedBits - baseTierBits);
+                EditorGUILayout.LabelField(
                     L(
-                        $"预计超出 VRChat 256 bit 上限 {overBits} bits。\n{suggestion}",
-                        $"Projected usage exceeds VRChat's 256-bit limit by {overBits} bits.\n{suggestion}"
+                        $"UniText 预计占用: {addedBits}b（基础 {baseTierBits}b + 选项 {optBits}b）· 拖入 Avatar 后显示完整预算",
+                        $"UniText Est.: {addedBits}b (Base {baseTierBits}b + Options {optBits}b) · Drop an Avatar for full budget"
                     ),
-                    MessageType.Warning
+                    _subtitleStyle
                 );
             }
 
             EditorGUILayout.EndVertical();
+        }
+
+        private static void DrawColorSwatch(Color color)
+        {
+            Rect rect = GUILayoutUtility.GetRect(9f, 14f, GUILayout.Width(9f), GUILayout.Height(14f));
+            EditorGUI.DrawRect(new Rect(rect.x, rect.y + 3f, 8f, 8f), color);
+        }
+
+        private void DrawSegmentedBudgetBar(
+            Rect barRect,
+            int baseBits,
+            int projectedTotal,
+            int addedBits,
+            int maxBits,
+            bool hasAvatar,
+            Color baseColor,
+            Color uniTextColor)
+        {
+            Color trackBg = EditorGUIUtility.isProSkin
+                ? new Color(0.14f, 0.14f, 0.14f, 1f)
+                : new Color(0.42f, 0.42f, 0.42f, 1f);
+            Color trackBorder = EditorGUIUtility.isProSkin
+                ? new Color(0.32f, 0.32f, 0.32f, 1f)
+                : new Color(0.28f, 0.28f, 0.28f, 1f);
+
+            EditorGUI.DrawRect(barRect, trackBg);
+
+            Rect inner = new Rect(
+                barRect.x + 1f,
+                barRect.y + 1f,
+                Mathf.Max(0f, barRect.width - 2f),
+                Mathf.Max(0f, barRect.height - 2f)
+            );
+
+            float baseWidth = 0f;
+            if (hasAvatar && baseBits > 0)
+            {
+                baseWidth = inner.width * Mathf.Clamp01((float)baseBits / maxBits);
+                EditorGUI.DrawRect(new Rect(inner.x, inner.y, baseWidth, inner.height), baseColor);
+            }
+
+            float totalWidth = inner.width * Mathf.Clamp01((float)projectedTotal / maxBits);
+            float addedWidth = Mathf.Max(0f, totalWidth - baseWidth);
+            if (addedWidth > 0f)
+            {
+                EditorGUI.DrawRect(new Rect(inner.x + baseWidth, inner.y, addedWidth, inner.height), uniTextColor);
+            }
+
+            DrawRectOutline(barRect, trackBorder, 1f);
+
+            string barText = hasAvatar ? $"{projectedTotal} / {maxBits} b" : $"UniText: {addedBits} / {maxBits} b";
+            GUI.Label(barRect, barText, _barLabelStyle);
         }
 
         private void DrawConfigurationSection()
@@ -710,7 +859,7 @@ namespace UniText.Editor
 
             _syncWorldDrop = EditorGUILayout.ToggleLeft(
                 new GUIContent(
-                    L("同步世界固定 (World Drop, +1 bit)", "Sync World Drop (+1 synced bit)"),
+                    L("同步世界固定 (World Drop, +1b)", "Sync World Drop (+1b)"),
                     L("开启后，其他玩家也能看到字幕板停留在世界空间中。", "Remote players also see the subtitle board stay frozen in world space.")
                 ),
                 _syncWorldDrop
@@ -718,7 +867,7 @@ namespace UniText.Editor
 
             _syncWideRows = EditorGUILayout.ToggleLeft(
                 new GUIContent(
-                    L("宽行模式 (比例字体 64 格/行, +1 bit)", "Wide Rows (proportional, 64 cells/row, +1 synced bit)"),
+                    L("宽行模式（比例字体 64 格/行，+1b）", "Wide Rows (64 proportional cells/row, +1b)"),
                     L("同步 UniText_Bank 列分区位，使每行最多容纳 64 个比例宽度字符（英文每行约多一倍）。关闭后每行仍为 32 格，但依旧按比例宽度排版。",
                       "Syncs the UniText_Bank column-bank bit so each row holds up to 64 proportional cells (about 2x more English per row). When off, rows keep 32 cells but still render proportionally.")
                 ),
@@ -741,21 +890,174 @@ namespace UniText.Editor
                 _stripOnAndroid
             );
 
-            EditorGUILayout.Space(6f);
-            DrawViewportSection();
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawViewportSection()
+        {
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            GUILayout.Label(L("5. 视窗与显示", "5. Viewport & Display"), _sectionHeaderStyle);
+            EditorGUILayout.Space(4f);
+
+            EditorGUILayout.BeginHorizontal();
+            DrawViewportPresetButton(L("标准 0.84×0.26 · 6行", "Standard 0.84×0.26 · 6r"), 0.84f, 0.2625f, 6);
+            DrawViewportPresetButton(L("长句 0.84×0.35 · 8行", "Long 0.84×0.35 · 8r"), 0.84f, 0.35f, 8);
+            DrawViewportPresetButton(L("紧凑 0.56×0.35 · 8行", "Compact 0.56×0.35 · 8r"), 0.56f, 0.35f, 8);
+            EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.Space(4f);
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+            float prevLabelWidth = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = _isChinese ? 84f : 86f;
+            _viewportWidth = EditorGUILayout.Slider(L("视窗宽度 (m)", "Width (m)"), _viewportWidth, UniTextProp.MinViewportWidth, UniTextProp.MaxViewportWidth);
+            _viewportHeight = EditorGUILayout.Slider(L("视窗高度 (m)", "Height (m)"), _viewportHeight, UniTextProp.MinViewportHeight, UniTextProp.MaxViewportHeight);
+            _displayRows = EditorGUILayout.IntSlider(
+                new GUIContent(
+                    L("显示行数", "Display Rows"),
+                    L("范围 4–12 行；大于 6 行时自动同步 UniText_RowPage (+1b)。", "Range 4–12 rows; > 6 rows automatically syncs UniText_RowPage (+1b).")
+                ),
+                _displayRows,
+                UniTextProp.MinDisplayRows,
+                UniTextProp.MaxDisplayRows
+            );
+            EditorGUIUtility.labelWidth = prevLabelWidth;
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.Space(4f);
+            DrawViewportPreview();
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(2f);
+            string resizeLabel = _displayRows > 6
+                ? L("允许游戏内实时调宽高与重排（已与 >6 行共享，+0b）", "Allow In-Game Live Resize & Reflow (shared with >6 rows, +0b)")
+                : L("允许游戏内实时调宽高与重排（+1b）", "Allow In-Game Live Resize & Reflow (+1b)");
+            string resizeTooltip = L(
+                "UniText_Width / UniText_Height 仅本地占用 (0b)，由发送端通过 CMD_SET_GEOMETRY 广播重排后的行数与行宽。仅在显示行数 ≤ 6 时需额外启用 UniText_RowPage (+1b)。",
+                "UniText_Width / UniText_Height stay local-only (0b); the sender broadcasts reflowed rows and width via CMD_SET_GEOMETRY. Only adds UniText_RowPage (+1b) when Display Rows ≤ 6."
+            );
+            _allowRuntimeResize = EditorGUILayout.ToggleLeft(new GUIContent(resizeLabel, resizeTooltip), _allowRuntimeResize);
+
+            int effRowPx = UniTextProp.ComputeRowPx(_viewportWidth, _viewportHeight, _displayRows, _autoFitRowPx, _rowPx, _syncWideRows);
+            int cjkPerRow = effRowPx / 12;
+            int totalCjk = cjkPerRow * _displayRows;
+            string manualSuffix = _autoFitRowPx ? string.Empty : L(" · 手动行宽", " · manual width");
+            EditorGUILayout.LabelField(
+                L(
+                    $"预计容量: 每行约 {cjkPerRow} 汉字 (~{effRowPx / 6} 英文) · 整屏约 {totalCjk} 汉字 ({effRowPx}px × {_displayRows}行){manualSuffix}",
+                    $"Capacity: ~{cjkPerRow} CJK / row (~{effRowPx / 6} EN) · ~{totalCjk} CJK total ({effRowPx}px × {_displayRows}r){manualSuffix}"
+                ),
+                _subtitleStyle
+            );
+
+            if (totalCjk < 140)
+            {
+                EditorGUILayout.HelpBox(
+                    L("当前整屏总字数偏少，超长句或双语对照可能显示不完，建议增加显示行数或放宽视窗宽度。",
+                      "Total viewport capacity is low; long or bilingual subtitles may overflow. Increase Display Rows or Width."),
+                    MessageType.Warning
+                );
+            }
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawViewportPresetButton(string label, float width, float height, int rows)
+        {
+            bool isMatch = Mathf.Abs(_viewportWidth - width) < 0.005f
+                && Mathf.Abs(_viewportHeight - height) < 0.005f
+                && _displayRows == rows;
+
+            Color prevBg = GUI.backgroundColor;
+            if (isMatch)
+            {
+                GUI.backgroundColor = new Color(0.45f, 0.78f, 1.0f, 1.0f);
+            }
+
+            GUIStyle style = isMatch ? _selectedMiniButtonStyle : EditorStyles.miniButton;
+            if (GUILayout.Button(label, style))
+            {
+                if (!isMatch)
+                {
+                    _viewportWidth = width;
+                    _viewportHeight = height;
+                    _displayRows = rows;
+                    ClearStatusMessage();
+                }
+                GUIUtility.keyboardControl = 0;
+            }
+
+            GUI.backgroundColor = prevBg;
+        }
+
+        private void DrawViewportPreview()
+        {
+            EditorGUILayout.BeginVertical(GUILayout.Width(86f));
+            Rect canvas = GUILayoutUtility.GetRect(84f, 46f, GUILayout.Width(84f), GUILayout.Height(46f));
+            EditorGUI.DrawRect(
+                canvas,
+                EditorGUIUtility.isProSkin ? new Color(0.11f, 0.12f, 0.14f, 1f) : new Color(0.22f, 0.24f, 0.27f, 1f)
+            );
+            DrawRectOutline(canvas, new Color(0.38f, 0.38f, 0.40f, 0.8f), 1f);
+
+            const float pad = 5f;
+            float availW = canvas.width - pad * 2f;
+            float availH = canvas.height - pad * 2f;
+            float aspect = Mathf.Max(0.1f, _viewportWidth / Mathf.Max(0.01f, _viewportHeight));
+
+            float boardW;
+            float boardH;
+            if (aspect >= availW / availH)
+            {
+                boardW = availW;
+                boardH = availW / aspect;
+            }
+            else
+            {
+                boardH = availH;
+                boardW = availH * aspect;
+            }
+
+            boardW = Mathf.Max(12f, boardW);
+            boardH = Mathf.Max(8f, boardH);
+
+            Rect boardRect = new Rect(
+                canvas.x + (canvas.width - boardW) * 0.5f,
+                canvas.y + (canvas.height - boardH) * 0.5f,
+                boardW,
+                boardH
+            );
+
+            EditorGUI.DrawRect(boardRect, new Color(0.18f, 0.36f, 0.52f, 0.45f));
+            DrawRectOutline(boardRect, new Color(0.42f, 0.76f, 1.0f, 0.90f), 1f);
+
+            Color rowLineColor = new Color(0.75f, 0.90f, 1.0f, 0.28f);
+            for (int r = 1; r < _displayRows; r++)
+            {
+                float y = boardRect.y + boardRect.height * ((float)r / _displayRows);
+                EditorGUI.DrawRect(new Rect(boardRect.x + 2f, y, Mathf.Max(0f, boardRect.width - 4f), 1f), rowLineColor);
+            }
+
+            GUILayout.Label($"{aspect:F2}:1", _previewCaptionStyle, GUILayout.Width(84f), GUILayout.Height(12f));
+            EditorGUILayout.EndVertical();
+        }
+
+        private void DrawAdvancedSection()
+        {
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             _showAdvanced = EditorGUILayout.Foldout(
                 _showAdvanced,
-                L("高级选项（骨骼绑定 / 偏移 / 菜单位置）", "Advanced Options (Bone Proxy / Offset / Menu)"),
+                L("高级选项（骨骼绑定 / 偏移 / 菜单 / 行宽）", "Advanced Options (Bone Proxy / Offset / Menu / Row Width)"),
                 true
             );
 
             if (_showAdvanced)
             {
-                EditorGUI.indentLevel++;
-                _useBoneProxy = EditorGUILayout.Toggle(
-                    L("启用骨骼绑定 (Bone Proxy)", "Use MA Bone Proxy"),
+                EditorGUILayout.Space(4f);
+                float prevLabelWidth = EditorGUIUtility.labelWidth;
+                EditorGUIUtility.labelWidth = _isChinese ? 96f : 118f;
+
+                _useBoneProxy = EditorGUILayout.ToggleLeft(
+                    L("启用骨骼绑定 (MA Bone Proxy)", "Use MA Bone Proxy"),
                     _useBoneProxy
                 );
 
@@ -764,20 +1066,23 @@ namespace UniText.Editor
                     L("跟随骨骼", "Follow Bone"),
                     _followBone
                 );
-                _autoPositionToBone = EditorGUILayout.Toggle(
+                _autoPositionToBone = EditorGUILayout.ToggleLeft(
                     L("自动对齐骨骼偏移", "Auto-Align to Bone"),
                     _autoPositionToBone
                 );
 
                 EditorGUI.BeginDisabledGroup(!_autoPositionToBone);
                 EditorGUILayout.BeginHorizontal();
-                _boneOffset = EditorGUILayout.Vector3Field(L("相对偏移", "Bone Offset"), _boneOffset);
-                if (GUILayout.Button(L("重置", "Reset"), GUILayout.Width(54f), GUILayout.Height(18f)))
+                GUILayout.Label(L("相对偏移 (m)", "Bone Offset (m)"));
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button(L("重置", "Reset"), EditorStyles.miniButton, GUILayout.Width(52f)))
                 {
                     _boneOffset = DefaultBoneOffset;
+                    ClearStatusMessage();
                     GUIUtility.keyboardControl = 0;
                 }
                 EditorGUILayout.EndHorizontal();
+                _boneOffset = EditorGUILayout.Vector3Field(GUIContent.none, _boneOffset);
                 EditorGUI.EndDisabledGroup();
                 EditorGUI.EndDisabledGroup();
 
@@ -791,79 +1096,22 @@ namespace UniText.Editor
                     false
                 );
                 EditorGUI.EndDisabledGroup();
-                EditorGUI.indentLevel--;
-            }
 
-            EditorGUILayout.EndVertical();
-        }
-
-        private void DrawViewportSection()
-        {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label(L("视窗尺寸与显示行数", "Viewport & Display Rows"), EditorStyles.boldLabel);
-
-            EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button(L("标准 0.84×0.26 · 6行", "Standard 0.84×0.26 · 6r"), EditorStyles.miniButton))
-            {
-                _viewportWidth = 0.84f; _viewportHeight = 0.2625f; _displayRows = 6;
-            }
-            if (GUILayout.Button(L("长句 0.84×0.35 · 8行", "Long 0.84×0.35 · 8r"), EditorStyles.miniButton))
-            {
-                _viewportWidth = 0.84f; _viewportHeight = 0.35f; _displayRows = 8;
-            }
-            if (GUILayout.Button(L("紧凑 0.56×0.35 · 8行", "Compact 0.56×0.35 · 8r"), EditorStyles.miniButton))
-            {
-                _viewportWidth = 0.56f; _viewportHeight = 0.35f; _displayRows = 8;
-            }
-            EditorGUILayout.EndHorizontal();
-
-            _viewportWidth = EditorGUILayout.Slider(L("视窗宽度 (m)", "Width (m)"), _viewportWidth, UniTextProp.MinViewportWidth, UniTextProp.MaxViewportWidth);
-            _viewportHeight = EditorGUILayout.Slider(L("视窗高度 (m)", "Height (m)"), _viewportHeight, UniTextProp.MinViewportHeight, UniTextProp.MaxViewportHeight);
-            _displayRows = EditorGUILayout.IntSlider(
-                new GUIContent(L("显示行数 (保底≥4行)", "Display Rows (min 4)"), L("大于 6 行时自动启用 UniText_RowPage (+1 bit)。", "Rows > 6 automatically sync UniText_RowPage (+1 bit).")),
-                _displayRows,
-                UniTextProp.MinDisplayRows,
-                UniTextProp.MaxDisplayRows
-            );
-
-            _allowRuntimeResize = EditorGUILayout.ToggleLeft(
-                new GUIContent(
-                    L("允许游戏内实时调宽高与重排 (Resize W/H, +1b)", "Allow In-Game Live Resize & Reflow (Resize W/H, +1b)"),
-                    L("UniText_Width / UniText_Height 仅本地（0 bit），由 VRCS 通过 CMD_SET_GEOMETRY 把重排后的行数与行宽广播给所有玩家；仅需启用 UniText_RowPage（+1 bit）。",
-                      "UniText_Width / UniText_Height stay local-only (0 bits); VRCS broadcasts the reflowed rows / row width to everyone via CMD_SET_GEOMETRY. Only UniText_RowPage (+1 bit) is synced.")
-                ),
-                _allowRuntimeResize
-            );
-            _autoFitRowPx = EditorGUILayout.ToggleLeft(
-                L("自动按视窗比例匹配行像素宽", "Auto-Fit Row Pixel Width to Aspect"),
-                _autoFitRowPx
-            );
-            if (!_autoFitRowPx)
-            {
-                int maxRowPx = _syncWideRows ? UniTextProp.MaxRowPx : UniTextProp.DefaultRowPx;
-                _rowPx = EditorGUILayout.IntSlider(L("行像素宽 (px)", "Row Width (px)"), _rowPx, UniTextProp.MinRowPx, maxRowPx);
-                _rowPx = Mathf.Clamp(Mathf.RoundToInt(_rowPx / 8f) * 8, UniTextProp.MinRowPx, maxRowPx);
-            }
-
-            int effRowPx = UniTextProp.ComputeRowPx(_viewportWidth, _viewportHeight, _displayRows, _autoFitRowPx, _rowPx, _syncWideRows);
-            int cjkPerRow = effRowPx / 12;
-            int totalCjk = cjkPerRow * _displayRows;
-            EditorGUILayout.LabelField(
-                L(
-                    $"预计容量: 每行约 {cjkPerRow} 汉字 (~{effRowPx / 6} 英文) · 整屏约 {totalCjk} 汉字 ({effRowPx}px × {_displayRows}行)",
-                    $"Capacity: ~{cjkPerRow} CJK / row (~{effRowPx / 6} EN) · ~{totalCjk} CJK total ({effRowPx}px × {_displayRows}r)"
-                ),
-                _subtitleStyle
-            );
-
-            if (totalCjk < 140)
-            {
-                EditorGUILayout.HelpBox(
-                    L("当前整屏总字数偏少，超长句或双语对照可能显示不完，建议增加显示行数或放宽视窗宽度。",
-                      "Total viewport capacity is low; long or bilingual subtitles may overflow. Increase Display Rows or Width."),
-                    MessageType.Warning
+                EditorGUILayout.Space(4f);
+                _autoFitRowPx = EditorGUILayout.ToggleLeft(
+                    L("自动按视窗比例匹配行像素宽", "Auto-Fit Row Pixel Width to Aspect"),
+                    _autoFitRowPx
                 );
+                if (!_autoFitRowPx)
+                {
+                    int maxRowPx = _syncWideRows ? UniTextProp.MaxRowPx : UniTextProp.DefaultRowPx;
+                    _rowPx = EditorGUILayout.IntSlider(L("行像素宽 (px)", "Row Width (px)"), _rowPx, UniTextProp.MinRowPx, maxRowPx);
+                    _rowPx = Mathf.Clamp(Mathf.RoundToInt(_rowPx / 8f) * 8, UniTextProp.MinRowPx, maxRowPx);
+                }
+
+                EditorGUIUtility.labelWidth = prevLabelWidth;
             }
+
             EditorGUILayout.EndVertical();
         }
 
@@ -925,17 +1173,30 @@ namespace UniText.Editor
                     MessageType.Info
                 );
             }
+        }
 
-            if (!string.IsNullOrEmpty(_statusMessage) && _statusMessageType != MessageType.None)
+        private void DrawStatusBanner()
+        {
+            if (string.IsNullOrEmpty(_statusMessage) || _statusMessageType == MessageType.None)
             {
-                EditorGUILayout.HelpBox(_statusMessage, _statusMessageType);
+                return;
             }
+
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.HelpBox(_statusMessage, _statusMessageType);
+            if (GUILayout.Button("×", EditorStyles.miniButton, GUILayout.Width(20f), GUILayout.Height(20f)))
+            {
+                ClearStatusMessage();
+                GUIUtility.keyboardControl = 0;
+            }
+            EditorGUILayout.EndHorizontal();
         }
 
         private void DrawFooterActions(
             VRCAvatarDescriptor descriptor,
             UniTextParameterChecker.AvatarBudgetSummary budgetSummary,
             GameObject tierPrefab,
+            int addedBits,
             int projectedTotal)
         {
             UniTextProp[] existingProps = descriptor != null ? budgetSummary.AttachedProps : null;
@@ -946,43 +1207,122 @@ namespace UniText.Editor
                 && existingProps[0].tier == _tier
                 && HasValidPropHierarchy(existingProps[0].gameObject)
                 && existingProps[0].gameObject != descriptor.gameObject;
+            bool hasPendingChanges = canUpdateInPlace && HasPendingChanges(existingProps[0]);
 
-            GetTierMetadata(_tier, out _, out _, out string tierLabel);
-
+            string tierName = GetTierShortName(_tier);
             string installButtonText;
             if (!hasExisting)
             {
-                installButtonText = L($"安装 UniText 到 Avatar ({tierLabel})", $"Install UniText to Avatar ({tierLabel})");
+                installButtonText = L($"安装 UniText · {tierName} ({addedBits}b)", $"Install UniText · {tierName} ({addedBits}b)");
             }
             else if (canUpdateInPlace)
             {
-                installButtonText = L($"更新已安装的 UniText ({tierLabel})", $"Update Installed UniText ({tierLabel})");
+                installButtonText = hasPendingChanges
+                    ? L($"更新 UniText 配置 · {tierName} ({addedBits}b)", $"Update UniText · {tierName} ({addedBits}b)")
+                    : L($"重新应用配置 · {tierName} ({addedBits}b)", $"Re-Apply Settings · {tierName} ({addedBits}b)");
             }
             else
             {
-                installButtonText = L($"替换为 {tierLabel}", $"Replace with {tierLabel}");
+                installButtonText = L($"替换为 {tierName} ({addedBits}b)", $"Replace with {tierName} ({addedBits}b)");
             }
 
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            if (hasPendingChanges)
+            {
+                int installedBits = existingProps[0].SyncedBitCost;
+                string dirtyText = installedBits != addedBits
+                    ? L($"● 有未应用的更改 ({installedBits}b → {addedBits}b)", $"● Unapplied changes ({installedBits}b → {addedBits}b)")
+                    : L("● 有未应用的更改", "● Unapplied changes");
+
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Label(dirtyText, _dirtyLabelStyle);
+                GUILayout.FlexibleSpace();
+                if (GUILayout.Button(L("还原", "Revert"), EditorStyles.miniButton, GUILayout.Width(52f)))
+                {
+                    SyncSettingsFromProp(existingProps[0]);
+                    ClearStatusMessage();
+                    GUIUtility.keyboardControl = 0;
+                }
+                EditorGUILayout.EndHorizontal();
+                EditorGUILayout.Space(2f);
+            }
+
             EditorGUILayout.BeginHorizontal();
 
-            GUI.enabled = descriptor != null && tierPrefab != null;
-            if (GUILayout.Button(installButtonText, _primaryButtonStyle, GUILayout.Height(36f)))
+            bool canRunPrimary = descriptor != null && tierPrefab != null;
+            bool highlightPrimary = canRunPrimary && (!canUpdateInPlace || hasPendingChanges);
+            Color prevBg = GUI.backgroundColor;
+            if (highlightPrimary)
+            {
+                GUI.backgroundColor = new Color(0.40f, 0.76f, 1.0f, 1.0f);
+            }
+
+            GUI.enabled = canRunPrimary;
+            if (GUILayout.Button(installButtonText, _primaryButtonStyle, GUILayout.Height(34f)))
             {
                 InstallOrUpdate(descriptor, budgetSummary, tierPrefab, projectedTotal);
             }
             GUI.enabled = true;
+            GUI.backgroundColor = prevBg;
 
             if (hasExisting)
             {
-                if (GUILayout.Button(L("卸载", "Uninstall"), GUILayout.Width(104f), GUILayout.Height(36f)))
+                GUILayout.Space(6f);
+                GUI.backgroundColor = new Color(0.95f, 0.48f, 0.48f, 1.0f);
+                if (GUILayout.Button(L("卸载", "Uninstall"), GUILayout.Width(84f), GUILayout.Height(34f)))
                 {
                     UninstallAll(descriptor, existingProps);
                 }
+                GUI.backgroundColor = prevBg;
             }
 
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
+        }
+
+        private bool HasPendingChanges(UniTextProp prop)
+        {
+            if (prop == null)
+            {
+                return false;
+            }
+
+            string currentMenuName = string.IsNullOrWhiteSpace(_menuName) ? "UniText" : _menuName.Trim();
+            string propMenuName = string.IsNullOrWhiteSpace(prop.menuName) ? "UniText" : prop.menuName.Trim();
+
+            int clampedRowPx = Mathf.Clamp(Mathf.RoundToInt(_rowPx / 8f) * 8, UniTextProp.MinRowPx, UniTextProp.MaxRowPx);
+            int propRowPx = Mathf.Clamp(Mathf.RoundToInt(prop.rowPx / 8f) * 8, UniTextProp.MinRowPx, UniTextProp.MaxRowPx);
+
+            return prop.tier != _tier
+                || prop.useBoneProxy != _useBoneProxy
+                || prop.followBone != _followBone
+                || prop.autoPositionToBone != _autoPositionToBone
+                || Vector3.SqrMagnitude(prop.boneOffset - _boneOffset) > 1e-6f
+                || prop.syncWorldDrop != _syncWorldDrop
+                || prop.syncWideRows != _syncWideRows
+                || prop.installMenu != _installMenu
+                || !string.Equals(propMenuName, currentMenuName, StringComparison.Ordinal)
+                || prop.installTargetMenu != _installTargetMenu
+                || prop.stripOnAndroid != _stripOnAndroid
+                || Mathf.Abs(Mathf.Clamp(prop.viewportWidth, UniTextProp.MinViewportWidth, UniTextProp.MaxViewportWidth) - _viewportWidth) > 0.0005f
+                || Mathf.Abs(Mathf.Clamp(prop.viewportHeight, UniTextProp.MinViewportHeight, UniTextProp.MaxViewportHeight) - _viewportHeight) > 0.0005f
+                || prop.EffectiveDisplayRows != _displayRows
+                || prop.autoFitRowPx != _autoFitRowPx
+                || (!_autoFitRowPx && propRowPx != clampedRowPx)
+                || prop.allowRuntimeResize != _allowRuntimeResize;
+        }
+
+        private static string GetTierShortName(UniTextTier tier)
+        {
+            switch (tier)
+            {
+                case UniTextTier.Lite: return "Lite";
+                case UniTextTier.Compact: return "Compact";
+                case UniTextTier.Balanced: return "Balanced";
+                case UniTextTier.Turbo: return "Turbo";
+                default: return "Standard";
+            }
         }
 
         private void InstallOrUpdate(
@@ -1002,8 +1342,8 @@ namespace UniText.Editor
                 bool proceed = EditorUtility.DisplayDialog(
                     L("参数预算超出上限", "Parameter Budget Exceeded"),
                     L(
-                        $"安装后预计同步参数为 {projectedTotal}/{UniTextParameterChecker.MaxSyncedBits} bits（超出 {over} bits），VRChat 可能会拒绝上传。\n\n是否仍要继续安装？",
-                        $"Projected synced parameter usage is {projectedTotal}/{UniTextParameterChecker.MaxSyncedBits} bits ({over} bits over limit), which may block VRChat avatar uploads.\n\nInstall anyway?"
+                        $"安装后预计同步参数为 {projectedTotal}/{UniTextParameterChecker.MaxSyncedBits}b（超出 {over}b），VRChat 可能会拒绝上传。\n\n是否仍要继续安装？",
+                        $"Projected synced parameter usage is {projectedTotal}/{UniTextParameterChecker.MaxSyncedBits}b ({over}b over limit), which may block VRChat avatar uploads.\n\nInstall anyway?"
                     ),
                     L("仍然安装", "Install Anyway"),
                     L("取消", "Cancel")
@@ -1113,6 +1453,20 @@ namespace UniText.Editor
                 EditorUtility.DisplayDialog(L("无法卸载 UniText", "Cannot Uninstall UniText"), removeError, "OK");
                 _statusMessage = removeError;
                 _statusMessageType = MessageType.Error;
+                return;
+            }
+
+            bool confirmUninstall = EditorUtility.DisplayDialog(
+                L("确认卸载 UniText", "Confirm Uninstall UniText"),
+                L(
+                    $"确定要从 \"{descriptor.gameObject.name}\" 移除已安装的 UniText 吗？\n\n移除后仍可通过 Ctrl+Z 撤销。",
+                    $"Remove installed UniText from '{descriptor.gameObject.name}'?\n\nYou can still undo this action with Ctrl+Z."
+                ),
+                L("确认卸载", "Uninstall"),
+                L("取消", "Cancel")
+            );
+            if (!confirmUninstall)
+            {
                 return;
             }
 

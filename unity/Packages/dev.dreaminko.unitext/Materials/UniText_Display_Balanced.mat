@@ -38,15 +38,15 @@ Material:
     m_Ints: []
     m_Floats:
     - _Billboard: 0
-    - _CornerRadius: 0.06
+    - _CornerRadius: 0.085
     - _Opacity: 1
     - _Padding: 0.045
-    - _ShadowStrength: 0.72
+    - _ShadowStrength: 0.68
     - _DisplayRows: 6
     - _RowPx: 384
     - _LiveGeometry: 1
     - _KeepGlyphAspect: 1
     m_Colors:
-    - _BgColor: {r: 0.04, g: 0.06, b: 0.1, a: 0.84}
-    - _BorderColor: {r: 0.28, g: 0.38, b: 0.56, a: 0.55}
+    - _BgColor: {r: 0.05, g: 0.065, b: 0.1, a: 0.86}
+    - _BorderColor: {r: 0.56, g: 0.68, b: 0.88, a: 0.42}
   m_BuildTextureStacks: []

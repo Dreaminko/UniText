@@ -3,7 +3,7 @@
 **Native Unicode (CJK / Multilingual) OSC Shared Subtitle Prop & Open Protocol for VRChat Avatar 3.0**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![VPM Package](https://img.shields.io/badge/VPM-dev.dreaminko.unitext-brightgreen.svg)](https://dreaminko.github.io/UniText/)
+[![VPM Package](https://img.shields.io/badge/VPM-dev.dreaminko.unitext-brightgreen.svg)](https://vpm.dreamo.ink/)
 
 UniText enables VRChat PC avatars to display **real-time, shared, multilingual (Chinese / Japanese / Korean / English / Unicode BMP) subtitles and translations** visible to every PC player in the instance—breaking past the native VRChat Chatbox limits (144 chars, 1.5s rate limit, 30s auto-hide, fixed overhead bubble).
 
@@ -19,9 +19,9 @@ UniText enables VRChat PC avatars to display **real-time, shared, multilingual (
 
 ### Method 1: VCC / VRChat Creator Companion (Recommended)
 
-1. Click **[Add UniText to VCC](vcc://vpm/addRepo?url=https://dreaminko.github.io/UniText/index.json)** (or visit [https://dreaminko.github.io/UniText/](https://dreaminko.github.io/UniText/)), or manually add the VPM Repository URL in VCC (`Settings → Packages → Add Repository`):
+1. Click **[Add UniText to VCC](vcc://vpm/addRepo?url=https://vpm.dreamo.ink/index.json)** (or visit [https://vpm.dreamo.ink/](https://vpm.dreamo.ink/)), or manually add the VPM Repository URL in VCC (`Settings → Packages → Add Repository`):
    ```text
-   https://dreaminko.github.io/UniText/index.json
+   https://vpm.dreamo.ink/index.json
    ```
 2. In your Avatar project in VCC, add **`UniText`** (`dev.dreaminko.unitext`). VCC will automatically install `com.vrchat.avatars`, `nadena.dev.modular-avatar`, and `nadena.dev.ndmf`.
 3. Open Unity (`2022.3.22f1`), click **`UniText → Install to Avatar`** (or **`Tools → UniText → Install to Avatar`**) in the top menu bar, drag your **Avatar** from the Scene Hierarchy into the window, choose your tier, and click **Install** (or manually drag one of the prefabs from `Packages/dev.dreaminko.unitext/Prefabs/` onto your Avatar root). Upload or enter Play Mode to preview!
@@ -63,28 +63,6 @@ UniText prefabs never modify your base Avatar Animator Controller, Expression Pa
 - **Local-only UI Controls & Capability Markers (0 synced bits)**: `UniText_ProtoVer`, `UniText_Rows`, `UniText_RowPx8`, `UniText_Width`, `UniText_Height`, `UniText_Billboard`, `UniText_Scale`, `UniText_Opacity`, `UniText_LocalClear`.
 - **VRAM Footprint**: Packed block-indexed atlas (`FontAtlas_BMP_Packed.png`, `680 KB`) + unified aux table (`UniTextAux_64x64.png`, `16 KB`) + CRT/ParamBridge (`16 KB`) ≈ **`712 KB`** total (`~67%` lower than v1's `2.1 MB`).
 - Check your avatar's remaining parameter budget in Unity via **`Tools → UniText → Check Avatar Parameter Budget`**. If your avatar's own clothing/slider toggles take too many bits, use **VRCFury Parameter Compressor** on your avatar's static menu parameters (while keeping UniText's OSC data parameters uncompressed).
-
----
-
-## Repository Layout
-
-```text
-├── docs/
-│   ├── PROTOCOL.md          # UniText OSC & proportional shader protocol specification
-│   └── SKIN_GUIDE.md        # Custom prop/skin authoring guide
-├── spec/
-│   ├── glyph-advance.json   # Canonical proportional glyph advance table (65,536 BMP)
-│   ├── lut12.json           # Canonical 4,096-entry 12-bit codebook for WRITE_LUT12
-│   └── test-vectors.json    # Canonical encoder/decoder/CRT test vectors
-├── tools/
-│   ├── font-atlas/          # Offline SIL OFL 1.1 BMP atlas & Lut12 generator/verifier
-│   ├── osc-tester/          # Local OSC sender & protocol test-vector verifier (127.0.0.1:9000)
-│   ├── vpm/                 # VPM release packager & GitHub Pages listing generator
-│   └── test_all.py          # End-to-end automated validation suite
-├── vpm/
-│   └── source.json          # VPM Listing source metadata
-└── unity/                   # Unity 2022.3.22f1 project containing Packages/dev.dreaminko.unitext/
-```
 
 ---
 

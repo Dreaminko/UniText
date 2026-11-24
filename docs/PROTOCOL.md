@@ -121,9 +121,9 @@ Let `N ∈ {3, 5, 6, 8, 16}` be the packet payload byte span (`D0 .. D{N-1}`). O
   - `bit 1` (`0x02`): **Highlight / Translated** (`1` = subtle highlight band + brightened text)
   - `bits 2..5`: Reserved (`0`)
 - **Global Status Indicator (`0..15`)**:
-  - `0`: `Idle` (subtle neutral dot)
-  - `1`: `Listening` (cyan/teal pulse)
-  - `2`: `Translating` (amber/gold pulse)
+  - `0`: `Idle` (clean neutral border, no active accent)
+  - `1`: `Listening` (subtle cyan/teal top-border breathing accent)
+  - `2`: `Translating` (subtle amber/gold top-border breathing accent)
   - `3..15`: Reserved
 - **`color` (`0..15`) Built-in 16-Color Palette**:
 
@@ -276,7 +276,7 @@ Replaces both v1's `Lut12_64x64.png` and `GlyphAdvance_128x128.png` with one `64
 
 | Test Item | Mode / Interval | Expected Result |
 | :--- | :--- | :--- |
-| `OscBundle` support | `bundle` @ `150ms` | Multilingual rows, row styles, and status dot render cleanly with zero tearing |
+| `OscBundle` support | `bundle` @ `150ms` | Multilingual rows, row styles, and status border accent render cleanly with zero tearing |
 | Single-packet tearing guard | `single` @ `150ms` (`Ctrl=0` gap) | No cross-frame partial `D*` overwrites |
 | Ring-Buffer scroll (`lite` / `33b`) | `scroll` / `long` @ `150ms` | 1-line scroll updates bottom row with zero upper-row retransmit |
 | Resizable viewport (`rows` / `rowPx`) | `long` @ `150ms` | `4..12` rows and `192..512 px` wrap cleanly without SDF/glyph distortion |
