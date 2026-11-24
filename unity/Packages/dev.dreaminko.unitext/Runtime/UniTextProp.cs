@@ -12,6 +12,22 @@ namespace UniText
         Balanced = 4
     }
 
+    public enum UniTextBoardAnchor
+    {
+        Center = 0,
+        BottomRight = 1,
+        BottomLeft = 2,
+        BottomCenter = 3
+    }
+
+    public enum UniTextPlacementPreset
+    {
+        RightSide = 0,
+        LeftSide = 1,
+        AboveHead = 2,
+        Custom = 3
+    }
+
     [DisallowMultipleComponent]
     [AddComponentMenu("UniText/UniText Subtitle Prop")]
 #if UNITEXT_VRCSDK3
@@ -32,6 +48,7 @@ namespace UniText
         public const int MinRowPx = 192;
         public const int MaxRowPx = 640;
         public const int DefaultRowPx = 384;
+        public static readonly Vector3 DefaultBoneOffset = new Vector3(0.28f, 0.14f, 0.16f);
 
         [Header("Bandwidth Tier")]
         public UniTextTier tier = UniTextTier.Standard;
@@ -56,10 +73,16 @@ namespace UniText
         [Tooltip("Manual logical row width in glyph pixels (192..640, stepped by 8) when Auto-Fit is off.")]
         public int rowPx = DefaultRowPx;
 
-        [Tooltip("Add a Resize (W/H) Two-Axis Puppet so in-game resizing reflows row count and line width for local and remote players. UniText_Width/Height stay local-only (0 synced bits): the sender (VRCS) broadcasts the resulting geometry via CMD_SET_GEOMETRY. Costs +1 bit (UniText_RowPage).")]
+        [Tooltip("Add persistent Width and Height Radial Puppets (0..1, default 0.5) under Appearance so in-game resizing reflows row count and line width for local and remote players. UniText_Width/Height stay local-only (0 synced bits): the sender (VRCS) broadcasts the resulting geometry via CMD_SET_GEOMETRY. Costs +1 bit (UniText_RowPage).")]
         public bool allowRuntimeResize = true;
 
         [Header("Modular Avatar Attachment")]
+        [Tooltip("Placement preset used for auto-fitting relative to the avatar.")]
+        public UniTextPlacementPreset placementPreset = UniTextPlacementPreset.RightSide;
+
+        [Tooltip("Pin anchor on DisplayQuad when scaling or resizing (BottomRight = inner-bottom corner on avatar's right side).")]
+        public UniTextBoardAnchor boardAnchor = UniTextBoardAnchor.BottomRight;
+
         [Tooltip("Automatically attach SideFollowAnchor to a humanoid bone via Modular Avatar Bone Proxy at build time.")]
         public bool useBoneProxy = true;
 
@@ -70,7 +93,7 @@ namespace UniText
         public bool autoPositionToBone = true;
 
         [Tooltip("Offset in avatar root space relative to the follow bone when autoPositionToBone is enabled.")]
-        public Vector3 boneOffset = new Vector3(0.48f, 0.18f, 0.16f);
+        public Vector3 boneOffset = DefaultBoneOffset;
 
         [Header("Parameters & Expressions Menu")]
         [Tooltip("Sync World Drop toggle across network (+1 synced bit) so remote players also see the board frozen in world space.")]
@@ -197,6 +220,36 @@ namespace UniText
 
         // Live resize no longer syncs UniText_Width/Height (local-only); remote viewers follow CMD_SET_GEOMETRY.
         public int SyncedBitCost => GetBaseSyncedBits(tier) + (syncWorldDrop ? 1 : 0) + (syncWideRows ? 1 : 0) + (NeedsRowPage ? 1 : 0);
+
+        public static Vector2 GetAnchorNormalized(UniTextBoardAnchor anchor)
+        {
+            switch (anchor)
+            {
+                case UniTextBoardAnchor.BottomRight: return new Vector2(0.5f, -0.5f);
+                case UniTextBoardAnchor.BottomLeft: return new Vector2(-0.5f, -0.5f);
+                case UniTextBoardAnchor.BottomCenter: return new Vector2(0f, -0.5f);
+                default: return Vector2.zero;
+            }
+        }
+
+        public static UniTextBoardAnchor GetPresetAnchor(UniTextPlacementPreset preset)
+        {
+            switch (preset)
+            {
+                case UniTextPlacementPreset.RightSide: return UniTextBoardAnchor.BottomRight;
+                case UniTextPlacementPreset.LeftSide: return UniTextBoardAnchor.BottomLeft;
+                case UniTextPlacementPreset.AboveHead: return UniTextBoardAnchor.BottomCenter;
+                default: return UniTextBoardAnchor.Center;
+            }
+        }
+
+        public Vector3 GetDisplayQuadLocalPosition()
+        {
+            float w = Mathf.Clamp(viewportWidth, MinViewportWidth, MaxViewportWidth);
+            float h = Mathf.Clamp(viewportHeight, MinViewportHeight, MaxViewportHeight);
+            Vector2 a = GetAnchorNormalized(boardAnchor);
+            return new Vector3(-a.x * w, -a.y * h, 0f);
+        }
 
         private void OnValidate()
         {

@@ -40,8 +40,8 @@ UniText prefabs never modify your base Avatar Animator Controller, Expression Pa
 
 - **Automatic Bone Attachment (`MA Bone Proxy`)**: Attaches `SideFollowAnchor` to the configured humanoid bone (defaults to `Chest`, with optional auto-offset alignment) and binds `BoardPivot` via `VRCParentConstraint` for seamless Side Follow / World Drop.
 - **Direct BlendTree FX Merge (`MA Merge Animator`)**: Generates the tier's Direct BlendTree FX layer in memory and merges it using `MergeAnimatorPathMode.Relative` and `matchAvatarWriteDefaults = true`.
-- **Automatic Parameters (`MA Parameters`)**: Registers `UniText_Visible`, `UniText_Ctrl`, `UniText_D0..D{N-1}`, optional synced `UniText_WorldDrop`, `UniText_Bank` (Wide Rows), and `UniText_RowPage` (`> 6` rows), plus local-only UI controls (`Resize W/H`, `Scale`, `Opacity`) and viewport geometry markers (`UniText_Rows`, `UniText_RowPx8`).
-- **Clean Single-Slot Submenu (`MA Menu Installer`)**: Installs a single `"UniText"` submenu entry (`Show Board`, `World Drop`, `Billboard`, `Scale`, `Opacity`, `Clear Screen`, `Resize (W/H)`) without cluttering your root Expressions Menu.
+- **Automatic Parameters (`MA Parameters`)**: Registers `UniText_Visible`, `UniText_Ctrl`, `UniText_D0..D{N-1}`, optional synced `UniText_WorldDrop`, `UniText_Bank` (Wide Rows), and `UniText_RowPage` (`> 6` rows), plus local-only UI controls (`Width`, `Height`, `Scale`, `Opacity`) and viewport geometry markers (`UniText_Rows`, `UniText_RowPx8`).
+- **Clean Single-Slot Submenu (`MA Menu Installer`)**: Installs a single `"UniText"` submenu entry (`Show Board`, `World Drop`, `Billboard`, `Clear Screen`, and an `Appearance` submenu containing `Scale`, `Opacity`, `Width`, and `Height`) without cluttering your root Expressions Menu.
 - **Automatic Quest/Android Stripping**: When `stripOnAndroid` is enabled (default), UniText automatically removes itself on Android builds without touching your PC prefab setup.
 
 ---

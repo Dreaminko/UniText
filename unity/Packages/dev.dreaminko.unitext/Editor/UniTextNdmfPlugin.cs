@@ -205,21 +205,23 @@ namespace UniText.Editor
                 );
             }
 
-            float viewportW = Mathf.Clamp(prop.viewportWidth, UniTextProp.MinViewportWidth, UniTextProp.MaxViewportWidth);
-            float viewportH = Mathf.Clamp(prop.viewportHeight, UniTextProp.MinViewportHeight, UniTextProp.MaxViewportHeight);
             int displayRows = prop.EffectiveDisplayRows;
             int rowPx = prop.EffectiveRowPx;
-            displayQuad.localScale = new Vector3(viewportW, viewportH, 1f);
+            UniTextPlacementUtility.ApplyTransformPreview(ctx.AvatarRootObject, prop, recordUndo: false);
 
             MeshRenderer dispRenderer = displayQuad.GetComponent<MeshRenderer>();
             if (dispRenderer != null && dispMat != null)
             {
                 float liveGeometry = prop.allowRuntimeResize ? 1f : 0f;
+                Vector2 anchorNorm = UniTextProp.GetAnchorNormalized(prop.boardAnchor);
+                bool anchorMismatch = !dispMat.HasProperty("_AnchorOffset") ||
+                    ((Vector2)dispMat.GetVector("_AnchorOffset") - anchorNorm).sqrMagnitude > 1e-6f;
                 bool needsClone =
                     displayRows != UniTextProp.DefaultDisplayRows ||
                     rowPx != UniTextProp.DefaultRowPx ||
                     !dispMat.HasProperty("_LiveGeometry") ||
-                    !Mathf.Approximately(dispMat.GetFloat("_LiveGeometry"), liveGeometry);
+                    !Mathf.Approximately(dispMat.GetFloat("_LiveGeometry"), liveGeometry) ||
+                    anchorMismatch;
                 if (needsClone)
                 {
                     // Base geometry is baked here; live resize (CMD_SET_GEOMETRY from the CRT) scales the quad in the vertex shader.
@@ -227,6 +229,7 @@ namespace UniText.Editor
                     dispMat.SetFloat("_DisplayRows", displayRows);
                     dispMat.SetFloat("_RowPx", rowPx);
                     dispMat.SetFloat("_LiveGeometry", liveGeometry);
+                    dispMat.SetVector("_AnchorOffset", new Vector4(anchorNorm.x, anchorNorm.y, 0f, 0f));
                     ctx.AssetSaver.SaveAsset(dispMat);
                 }
                 dispRenderer.sharedMaterial = dispMat;
@@ -238,14 +241,6 @@ namespace UniText.Editor
                 Transform targetBone = ResolveHumanoidBone(ctx.AvatarRootObject, prop.followBone);
                 if (targetBone != null)
                 {
-                    if (prop.autoPositionToBone)
-                    {
-                        Vector3 worldPos = targetBone.position + ctx.AvatarRootObject.transform.TransformDirection(prop.boneOffset);
-                        Quaternion worldRot = ctx.AvatarRootObject.transform.rotation;
-                        anchor.SetPositionAndRotation(worldPos, worldRot);
-                        boardPivot.SetPositionAndRotation(worldPos, worldRot);
-                    }
-
                     var boneProxy = anchor.GetComponent<ModularAvatarBoneProxy>() ?? anchor.gameObject.AddComponent<ModularAvatarBoneProxy>();
                     boneProxy.target = targetBone;
                     boneProxy.attachmentMode = BoneProxyAttachmentMode.AsChildKeepWorldPose;
@@ -405,10 +400,10 @@ namespace UniText.Editor
             list.Add(MakeParam("UniText_LocalClear", localBoolType, 0f, saved: false, internalParam: false, localOnly: true));
             if (allowRuntimeResize)
             {
-                // Local-only Float (-1..+1, center 0): VRCS reads it over OSC, reflows, and broadcasts the result to
-                // every viewer via CMD_SET_GEOMETRY (Ctrl 251), so the puppet itself costs 0 synced bits.
-                list.Add(MakeParam("UniText_Width", localFloatType, 0f, saved: true, internalParam: false, localOnly: true));
-                list.Add(MakeParam("UniText_Height", localFloatType, 0f, saved: true, internalParam: false, localOnly: true));
+                // Local-only Float (0..1, neutral 0.5 for RadialPuppet): VRCS reads it over OSC, reflows, and broadcasts
+                // the result to every viewer via CMD_SET_GEOMETRY (Ctrl 251), so both puppets cost 0 synced bits.
+                list.Add(MakeParam("UniText_Width", localFloatType, 0.5f, saved: true, internalParam: false, localOnly: true));
+                list.Add(MakeParam("UniText_Height", localFloatType, 0.5f, saved: true, internalParam: false, localOnly: true));
             }
             list.Add(MakeParam("UniText_One", ParameterSyncType.NotSynced, 1f, saved: false, internalParam: true, localOnly: false));
 

@@ -1041,12 +1041,13 @@ def test_osc_tester_cli() -> None:
     }
     assert detect_viewport_from_oscquery_tree(vp_tree) == (64, 8, 256, True)
 
-    # Live Resize (W/H) viewport mapping across (-1, 0, +1) corners + 8-px rounding + narrow 384px cap
-    assert resolve_live_viewport(6, 384, 0.0, 0.0, wide_rows=True) == (6, 384)
-    assert resolve_live_viewport(6, 384, -1.0, -1.0, wide_rows=True) == (4, 192)
+    # Live Width / Height RadialPuppet viewport mapping across (0.0, 0.5, 1.0) + 8-px rounding + narrow 384px cap
+    assert resolve_live_viewport(6, 384) == (6, 384)
+    assert resolve_live_viewport(6, 384, 0.5, 0.5, wide_rows=True) == (6, 384)
+    assert resolve_live_viewport(6, 384, 0.0, 0.0, wide_rows=True) == (4, 192)
     assert resolve_live_viewport(6, 384, 1.0, 1.0, wide_rows=True) == (12, 576)
     assert resolve_live_viewport(6, 384, 1.0, 1.0, wide_rows=False) == (12, 384)
-    assert resolve_live_viewport(6, 384, 0.1, 0.0, wide_rows=True)[1] % 8 == 0
+    assert resolve_live_viewport(6, 384, 0.55, 0.5, wide_rows=True)[1] % 8 == 0
     vp_live = {
         "FULL_PATH": "/avatar/parameters",
         "CONTENTS": {
@@ -1059,6 +1060,12 @@ def test_osc_tester_cli() -> None:
         },
     }
     assert detect_viewport_from_oscquery_tree(vp_live) == (64, 12, 576, True)
+    vp_live["CONTENTS"]["UniText_Width"]["VALUE"] = [0.5]
+    vp_live["CONTENTS"]["UniText_Height"]["VALUE"] = [0.5]
+    assert detect_viewport_from_oscquery_tree(vp_live) == (64, 6, 384, True)
+    vp_live["CONTENTS"]["UniText_Width"]["VALUE"] = [0.0]
+    vp_live["CONTENTS"]["UniText_Height"]["VALUE"] = [0.0]
+    assert detect_viewport_from_oscquery_tree(vp_live) == (64, 4, 192, True)
 
     send_demo = str(REPO_ROOT / "tools" / "osc-tester" / "send_demo.py")
     subprocess.run([sys.executable, send_demo, "--verify-vectors"], check=True, stdout=subprocess.DEVNULL)
@@ -1205,6 +1212,7 @@ def test_shaders_static() -> None:
         "UniTextSampleGlyphAndShadow",
         "_AuxTex",
         "_LiveGeometry",
+        "_AnchorOffset",
         "_FontAtlas_TexelSize",
         "panelAspect",
         "_DisplayRows",
@@ -1294,6 +1302,7 @@ def test_unity_package_integrity() -> None:
             assert expected in rt_txt, f"ParamBridge_8x1_{tier}.renderTexture missing '{expected}'"
 
     builder_src = (PKG_DIR / "Editor" / "UniTextAssetBuilder.cs").read_text(encoding="utf-8")
+    _check_balanced_braces(builder_src, "UniTextAssetBuilder.cs")
     assert 'shaderPass = "' not in builder_src
     for tok in (
         "ConfigureAuxImporter",
@@ -1314,9 +1323,14 @@ def test_unity_package_integrity() -> None:
         "DepthTextureMode.None",
         "allowDynamicResolution = false",
         "encoderQuad.layer = ParamBridgeLayer",
+        "UniText_AppearanceMenu",
+        "saveAsset?.Invoke(appearanceMenu)",
+        "Appearance",
+        'name = "Width"',
+        'name = "Height"',
     ):
         assert tok in builder_src, f"UniTextAssetBuilder.cs missing '{tok}'"
-    for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "UniText_ParamCamera", "BuildConstantLayer"):
+    for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "UniText_ParamCamera", "BuildConstantLayer", "TwoAxisPuppet"):
         assert legacy_tok not in builder_src, f"UniTextAssetBuilder.cs still contains legacy '{legacy_tok}'"
 
     prop_src = (PKG_DIR / "Runtime" / "UniTextProp.cs").read_text(encoding="utf-8")
@@ -1332,6 +1346,8 @@ def test_unity_package_integrity() -> None:
         "displayRows",
         "NeedsRowPage",
         "ComputeRuntimeBounds",
+        "UniTextBoardAnchor",
+        "UniTextPlacementPreset",
     ):
         assert prop_tok in prop_src, f"UniTextProp.cs missing '{prop_tok}'"
 
@@ -1370,6 +1386,7 @@ def test_unity_package_integrity() -> None:
         if mat_path.name.startswith("UniText_Display_"):
             assert "- _DisplayRows: 6" in mat_txt and "- _RowPx: 384" in mat_txt
             assert "_AuxTex:" in mat_txt and "- _LiveGeometry: 1" in mat_txt
+            assert "- _AnchorOffset: {r: 0.5, g: -0.5, b: 0, a: 0}" in mat_txt
         for ref_guid in re.findall(r"guid:\s*([0-9a-f]{32})", mat_txt):
             assert ref_guid in known_guids, f"Broken GUID {ref_guid} in {mat_path.name}"
 
@@ -1399,15 +1416,46 @@ def test_unity_package_integrity() -> None:
         "DepthTextureMode.None",
         "allowDynamicResolution = false",
         "encoderQuadTf.gameObject.layer = UniTextAssetBuilder.ParamBridgeLayer",
+        'MakeParam("UniText_Width", localFloatType, 0.5f',
+        'MakeParam("UniText_Height", localFloatType, 0.5f',
+        "UniTextPlacementUtility",
     ]:
         assert req_token in ndmf_src, f"UniTextNdmfPlugin.cs missing '{req_token}'"
     for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13"):
         assert legacy_tok not in ndmf_src, f"UniTextNdmfPlugin.cs still contains legacy '{legacy_tok}'"
 
+    placement_src = (PKG_DIR / "Editor" / "UniTextPlacementUtility.cs").read_text(encoding="utf-8")
+    _check_balanced_braces(placement_src, "UniTextPlacementUtility.cs")
+    for req_token in ("CuratedFollowBones", "DrawFollowBonePopup", "DrawFollowBoneProperty"):
+        assert req_token in placement_src, f"UniTextPlacementUtility.cs missing '{req_token}'"
+    assert "HumanBodyBones.LastBone" not in placement_src, (
+        "UniTextPlacementUtility.cs must not reference HumanBodyBones.LastBone"
+    )
+    assert not re.search(r"HumanBodyBones\.\w*(?:Thumb|Index|Middle|Ring|Little)\w*", placement_src), (
+        "UniTextPlacementUtility.cs must not reference finger bones"
+    )
+
     installer_src = (PKG_DIR / "Editor" / "UniTextInstallerWindow.cs").read_text(encoding="utf-8")
     _check_balanced_braces(installer_src, "UniTextInstallerWindow.cs")
-    for req_token in ("UniTextInstallerWindow", "Board_Lite_33b.prefab", "Board_Compact_45b.prefab", "_displayRows", "DrawViewportSection"):
+    for req_token in (
+        "UniTextInstallerWindow",
+        "Board_Lite_33b.prefab",
+        "Board_Compact_45b.prefab",
+        "_displayRows",
+        "DrawViewportSection",
+        "DrawFollowBonePopup",
+    ):
         assert req_token in installer_src, f"UniTextInstallerWindow.cs missing '{req_token}'"
+    assert "(HumanBodyBones)EditorGUILayout.EnumPopup" not in installer_src, (
+        "UniTextInstallerWindow.cs should use DrawFollowBonePopup instead of raw HumanBodyBones EnumPopup"
+    )
+
+    prop_editor_src = (PKG_DIR / "Editor" / "UniTextPropEditor.cs").read_text(encoding="utf-8")
+    _check_balanced_braces(prop_editor_src, "UniTextPropEditor.cs")
+    assert "DrawFollowBoneProperty" in prop_editor_src, "UniTextPropEditor.cs missing 'DrawFollowBoneProperty'"
+    assert "DrawDefaultInspector()" not in prop_editor_src, (
+        "UniTextPropEditor.cs should use DrawFollowBoneProperty instead of DrawDefaultInspector()"
+    )
 
     builtin_guid = "0000000000000000e000000000000000"
     for prefab_name, expected_tier in [
@@ -1424,6 +1472,9 @@ def test_unity_package_integrity() -> None:
         assert f"tier: {expected_tier}" in prefab_txt
         assert "syncWideRows: 1" in prefab_txt
         assert "viewportWidth: 0.84" in prefab_txt and "displayRows: 6" in prefab_txt
+        assert "boardAnchor: 1" in prefab_txt
+        assert "m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}" in prefab_txt
+        assert "m_LocalPosition: {x: -0.42, y: 0.13125, z: 0}" in prefab_txt
         assert "m_Bits: 1536" in prefab_txt, f"{prefab_name}: ParamCamera cullingMask must be 1536 (Player | PlayerLocal)"
         assert "m_RenderingPath: 1" in prefab_txt, f"{prefab_name}: ParamCamera m_RenderingPath must be 1 (Forward)"
         assert re.search(r"m_Layer:\s*9\r?\n\s*m_Name:\s*EncoderQuad", prefab_txt), (

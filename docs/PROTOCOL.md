@@ -32,7 +32,7 @@ This document is the **single source of truth** for the UniText Avatar 3.0 OSC s
 
 ### 1.2 Proportional Layout, Row Width & Long-Sentence Overflow
 
-- **Row Pixel Budget (`UniText_RowPx8`)**: Default base row width is **`384` glyph pixels** (`32` full-width `12 px` CJK glyphs). `UniText_RowPx8` (`Int`, local-only) exposes the base width `base_row_px = UniText_RowPx8 * 8 ∈ [192, 640]`. When `UniText_Width` / `UniText_Height` (`Float ∈ [-1, +1]`) are present, live `(rows, row_px)` scale smoothly around the base config (see Section 2.2).
+- **Row Pixel Budget (`UniText_RowPx8`)**: Default base row width is **`384` glyph pixels** (`32` full-width `12 px` CJK glyphs). `UniText_RowPx8` (`Int`, local-only) exposes the base width `base_row_px = UniText_RowPx8 * 8 ∈ [192, 640]`. When `UniText_Width` / `UniText_Height` (`Float ∈ [0, 1]`, neutral `0.5`) are present, live `(rows, row_px)` scale smoothly around the base config (see Section 2.2).
 - **Proportional Advances (`0..12 px`)**:
   - Latin / ASCII / punctuation glyphs use their proportional advance from [`spec/glyph-advance.json`](../spec/glyph-advance.json) (e.g., `'i' = 4 px`, `' ' = 6 px`, `'a' = 6 px`, `'W' = 10 px`), fitting `~55–64` English chars in `384 px`.
   - Full-width CJK ideographs, Kana, and Hangul remain `12 px`.
@@ -63,8 +63,8 @@ All data channels **MUST** be declared as **`Int`** (`0..255`) in VRChat `VRCExp
 | `UniText_D8` .. `UniText_D15` | `/avatar/parameters/UniText_D8..D15` | `Int` × 8 | 64 | — | — | — | — | Required | `false` | `0` | Payload bytes `8..15` |
 | `UniText_Bank` | `/avatar/parameters/UniText_Bank` | `Bool` | 1 | Optional | Optional | Optional | Optional | Optional | `false` | `false` | Wide Rows bank selector (`false` = cols `0..31`, `true` = cols `32..63`) |
 | `UniText_RowPage` | `/avatar/parameters/UniText_RowPage` | `Bool` | 1 | Optional | Optional | Optional | Optional | Optional | `false` | `false` | Extended Rows page selector (`false` = rows `0..5`, `true` = rows `6..11`; registered when `displayRows > 6` or live resize enabled) |
-| `UniText_Width` | `/avatar/parameters/UniText_Width` | `Float` (local-only) | **0** | Optional | Optional | Optional | Optional | Optional | `true` | `0.0` | In-game `Resize (W)` axis (`-1.0 .. +1.0`; VRCS reads locally and syncs result via `CMD_SET_GEOMETRY`) |
-| `UniText_Height` | `/avatar/parameters/UniText_Height` | `Float` (local-only) | **0** | Optional | Optional | Optional | Optional | Optional | `true` | `0.0` | In-game `Resize (H)` axis (`-1.0 .. +1.0`; VRCS reads locally and syncs result via `CMD_SET_GEOMETRY`) |
+| `UniText_Width` | `/avatar/parameters/UniText_Width` | `Float` (local-only) | **0** | Optional | Optional | Optional | Optional | Optional | `true` | `0.5` | In-game `Width` RadialPuppet (`0.0 .. 1.0`, neutral `0.5`; VRCS reads locally and syncs result via `CMD_SET_GEOMETRY`) |
+| `UniText_Height` | `/avatar/parameters/UniText_Height` | `Float` (local-only) | **0** | Optional | Optional | Optional | Optional | Optional | `true` | `0.5` | In-game `Height` RadialPuppet (`0.0 .. 1.0`, neutral `0.5`; VRCS reads locally and syncs result via `CMD_SET_GEOMETRY`) |
 | `UniText_ProtoVer` | `/avatar/parameters/UniText_ProtoVer` | `Int` (local-only) | **0** | Present | Present | Present | Present | Present | `false` | `2` | Protocol version marker (`2`) |
 | `UniText_Rows` | `/avatar/parameters/UniText_Rows` | `Int` (local-only) | **0** | Present | Present | Present | Present | Present | `false` | `6` | Configured base visible row count `base_rows ∈ [4, 12]` |
 | `UniText_RowPx8` | `/avatar/parameters/UniText_RowPx8` | `Int` (local-only) | **0** | Present | Present | Present | Present | Present | `false` | `48` | Base logical row width in 8 px units (`base_row_px = VALUE * 8`, `192..640 px`) |
@@ -81,8 +81,10 @@ Senders query VRChat OSCQuery at `/avatar/parameters`:
    - `cols = 64` if `UniText_Bank` exists, else `32`.
    - `base_rows = clamp(UniText_Rows.VALUE, 4, 12)` (default `6`).
    - `base_row_px = clamp(UniText_RowPx8.VALUE * 8, 192, cols == 64 ? 640 : 384)` (default `384`).
-   - Read `w = clamp(UniText_Width, -1.0, 1.0)` and `h = clamp(UniText_Height, -1.0, 1.0)` (default `0.0`), and listen to incoming VRChat OSC updates on `/avatar/parameters/UniText_Width` and `/avatar/parameters/UniText_Height`:
+   - Read `w_raw = clamp(UniText_Width, 0.0, 1.0)` and `h_raw = clamp(UniText_Height, 0.0, 1.0)` (default **`0.5`** when absent; persistent `RadialPuppet` controls in `[0.0, 1.0]` with neutral `0.5`), map them to signed factors `w = w_raw * 2.0 - 1.0` and `h = h_raw * 2.0 - 1.0` (`[-1.0, +1.0]`), and listen to incoming VRChat OSC updates on `/avatar/parameters/UniText_Width` and `/avatar/parameters/UniText_Height`:
      ```text
+     w = clamp(UniText_Width, 0.0, 1.0) * 2.0 - 1.0
+     h = clamp(UniText_Height, 0.0, 1.0) * 2.0 - 1.0
      row_px_min  = clamp(round_to_8(base_row_px * 0.5), 192, base_row_px)
      row_px_max  = clamp(round_to_8(base_row_px * 1.5), base_row_px, cols == 64 ? 640 : 384)
      live_row_px = clamp(round_to_8(w < 0 ? base_row_px + w * (base_row_px - row_px_min) : base_row_px + w * (row_px_max - base_row_px)), 192, cols == 64 ? 640 : 384)

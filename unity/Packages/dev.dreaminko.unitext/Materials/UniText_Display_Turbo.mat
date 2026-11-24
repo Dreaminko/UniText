@@ -47,6 +47,7 @@ Material:
     - _LiveGeometry: 1
     - _KeepGlyphAspect: 1
     m_Colors:
+    - _AnchorOffset: {r: 0.5, g: -0.5, b: 0, a: 0}
     - _BgColor: {r: 0.05, g: 0.065, b: 0.1, a: 0.86}
     - _BorderColor: {r: 0.56, g: 0.68, b: 0.88, a: 0.42}
   m_BuildTextureStacks: []

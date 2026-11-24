@@ -149,11 +149,11 @@ def normalize_bmp_codepoint(ch: str) -> int:
 def resolve_live_viewport(
     base_rows: int,
     base_row_px: int,
-    width_param: float = 0.0,
-    height_param: float = 0.0,
+    width_param: float = 0.5,
+    height_param: float = 0.5,
     wide_rows: bool = True,
 ) -> Tuple[int, int]:
-    """Compute live (rows, row_px) from base config + Resize (W/H) parameters in [-1, +1]."""
+    """Compute live (rows, row_px) from base config + Width / Height RadialPuppet parameters in [0, 1] (0.5 = base)."""
     b_rows = max(MIN_ROWS, min(MAX_ROWS, int(base_rows)))
     max_allowed = MAX_ROW_PX if wide_rows else ROW_PX
     b_px = max(MIN_ROW_PX, min(max_allowed, int(round(base_row_px / 8.0)) * 8))
@@ -161,11 +161,11 @@ def resolve_live_viewport(
     px_min = max(MIN_ROW_PX, min(b_px, int(round((b_px * 0.5) / 8.0)) * 8))
     px_max = max(b_px, min(max_allowed, int(round((b_px * 1.5) / 8.0)) * 8))
 
-    w = max(-1.0, min(1.0, float(width_param)))
+    w = max(0.0, min(1.0, float(width_param))) * 2.0 - 1.0
     raw_px = (b_px + w * (b_px - px_min)) if w < 0.0 else (b_px + w * (px_max - b_px))
     live_px = max(MIN_ROW_PX, min(max_allowed, int(round(raw_px / 8.0)) * 8))
 
-    h = max(-1.0, min(1.0, float(height_param)))
+    h = max(0.0, min(1.0, float(height_param))) * 2.0 - 1.0
     raw_rows = (b_rows + h * (b_rows - MIN_ROWS)) if h < 0.0 else (b_rows + h * (MAX_ROWS - b_rows))
     live_rows = max(MIN_ROWS, min(MAX_ROWS, int(round(raw_rows))))
 

@@ -16,6 +16,7 @@ Shader "UniText/Display"
         [Toggle] _LiveGeometry ("Follow Sender Geometry (CMD_SET_GEOMETRY)", Float) = 0
         [Toggle] _KeepGlyphAspect ("Preserve Glyph Aspect", Float) = 1
         [Toggle] _Billboard ("Stereo Billboard", Float) = 0
+        _AnchorOffset ("Anchor Offset (XY)", Vector) = (0, 0, 0, 0)
     }
     SubShader
     {
@@ -53,6 +54,7 @@ Shader "UniText/Display"
             float _LiveGeometry;
             float _KeepGlyphAspect;
             float _Billboard;
+            float4 _AnchorOffset;
 
             struct appdata
             {
@@ -99,19 +101,20 @@ Shader "UniText/Display"
                 UNITY_INITIALIZE_OUTPUT(v2f, o);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
 
-                float3 scale = float3(
+                float3 baseScale = float3(
                     length(float3(unity_ObjectToWorld[0][0], unity_ObjectToWorld[1][0], unity_ObjectToWorld[2][0])),
                     length(float3(unity_ObjectToWorld[0][1], unity_ObjectToWorld[1][1], unity_ObjectToWorld[2][1])),
                     length(float3(unity_ObjectToWorld[0][2], unity_ObjectToWorld[1][2], unity_ObjectToWorld[2][2]))
                 );
 
-                // Live resize: physical panel size scales linearly with (row_px, rows) around the baked base size.
+                // Live resize: physical panel size scales linearly with (row_px, rows) around the anchor point.
                 float2 geo = UniTextResolveGeometry();
                 float baseRows = clamp(round(_DisplayRows), 4.0, (float)UNITEXT_MAX_ROWS);
                 float baseRowPx = clamp(round(_RowPx), 192.0, 640.0);
                 float2 liveScale = float2(geo.y / baseRowPx, geo.x / baseRows);
-                float4 vtx = float4(v.vertex.xy * liveScale, v.vertex.z, 1.0);
-                scale.xy *= liveScale;
+                float2 anchor = _AnchorOffset.xy;
+                float4 vtx = float4((v.vertex.xy - anchor) * liveScale + anchor, v.vertex.z, 1.0);
+                float3 scale = float3(baseScale.xy * liveScale, baseScale.z);
                 uint activeRows = (uint)clamp(round(geo.x), 4.0, (float)UNITEXT_MAX_ROWS);
                 uint topRow = UniTextSampleTopRow(_BufferTex, activeRows);
                 uint status = UniTextSampleStatus(_BufferTex);
@@ -120,17 +123,14 @@ Shader "UniText/Display"
 
                 if (_Billboard > 0.5)
                 {
-                    float3 worldPivot = float3(
-                        unity_ObjectToWorld[0][3],
-                        unity_ObjectToWorld[1][3],
-                        unity_ObjectToWorld[2][3]
-                    );
+                    float2 liveCenterLocal = anchor * (1.0 - liveScale);
+                    float3 worldPivot = mul(unity_ObjectToWorld, float4(liveCenterLocal, 0.0, 1.0)).xyz;
 
                     float3 camPos = UniTextGetStereoCenterCamPos();
                     float3 forward = normalize(camPos - worldPivot);
                     float3 upRef = (abs(forward.y) > 0.995) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
-                    float3 right = normalize(cross(upRef, forward));
-                    float3 up = cross(forward, right);
+                    float3 right = normalize(cross(forward, upRef));
+                    float3 up = cross(right, forward);
 
                     float3 worldPos = worldPivot
                         + right * (v.vertex.x * scale.x)

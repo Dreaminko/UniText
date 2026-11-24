@@ -16,7 +16,6 @@ namespace UniText.Editor
     public class UniTextInstallerWindow : EditorWindow
     {
         private const string LanguagePrefKey = "UniText.Installer.Language";
-        private static readonly Vector3 DefaultBoneOffset = new Vector3(0.48f, 0.18f, 0.16f);
 
         private const string LitePrefabName = "Board_Lite_33b.prefab";
         private const string CompactPrefabName = "Board_Compact_45b.prefab";
@@ -32,10 +31,12 @@ namespace UniText.Editor
 
         [SerializeField] private GameObject _rawTargetObject;
         [SerializeField] private UniTextTier _tier = UniTextTier.Standard;
+        [SerializeField] private UniTextPlacementPreset _placementPreset = UniTextPlacementPreset.RightSide;
+        [SerializeField] private UniTextBoardAnchor _boardAnchor = UniTextBoardAnchor.BottomRight;
         [SerializeField] private bool _useBoneProxy = true;
         [SerializeField] private HumanBodyBones _followBone = HumanBodyBones.Chest;
         [SerializeField] private bool _autoPositionToBone = true;
-        [SerializeField] private Vector3 _boneOffset = DefaultBoneOffset;
+        [SerializeField] private Vector3 _boneOffset = new Vector3(0.28f, 0.14f, 0.16f);
         [SerializeField] private bool _syncWorldDrop = true;
         [SerializeField] private bool _syncWideRows = true;
         [SerializeField] private bool _installMenu = true;
@@ -292,11 +293,22 @@ namespace UniText.Editor
             {
                 SyncSettingsFromProp(existingProps[0]);
             }
+            else if (_autoPositionToBone && _placementPreset != UniTextPlacementPreset.Custom)
+            {
+                _boneOffset = UniTextPlacementUtility.ComputeAdaptiveBoneOffset(
+                    descriptor.gameObject,
+                    _placementPreset,
+                    _followBone,
+                    UniTextProp.DefaultBoneOffset
+                );
+            }
         }
 
         private void SyncSettingsFromProp(UniTextProp prop)
         {
             _tier = prop.tier;
+            _placementPreset = prop.placementPreset;
+            _boardAnchor = prop.boardAnchor;
             _useBoneProxy = prop.useBoneProxy;
             _followBone = prop.followBone;
             _autoPositionToBone = prop.autoPositionToBone;
@@ -353,10 +365,10 @@ namespace UniText.Editor
             DrawConfigurationSection();
 
             EditorGUILayout.Space(8f);
-            DrawViewportSection();
+            DrawViewportSection(descriptor);
 
             EditorGUILayout.Space(8f);
-            DrawAdvancedSection();
+            DrawAdvancedSection(descriptor);
 
             if (EditorGUI.EndChangeCheck())
             {
@@ -877,7 +889,7 @@ namespace UniText.Editor
             _installMenu = EditorGUILayout.ToggleLeft(
                 new GUIContent(
                     L("安装表情菜单子菜单 (UniText)", "Install Expressions Submenu (UniText)"),
-                    L("通过 Modular Avatar Menu Installer 自动添加显示/固定/缩放/透明度/清屏控制菜单。", "Adds Show Board, World Drop, Billboard, Scale, Opacity, and Clear Screen controls.")
+                    L("通过 Modular Avatar Menu Installer 自动添加显示/固定/朝向/清屏控制，并将缩放/透明度/宽度/高度归类到 Appearance 子菜单。", "Adds Show Board, World Drop, Billboard, Clear Screen, and an Appearance submenu (Scale, Opacity, Width, Height).")
                 ),
                 _installMenu
             );
@@ -893,12 +905,21 @@ namespace UniText.Editor
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawViewportSection()
+        private void DrawViewportSection(VRCAvatarDescriptor descriptor)
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            GUILayout.Label(L("5. 视窗与显示", "5. Viewport & Display"), _sectionHeaderStyle);
+            GUILayout.Label(L("5. 视窗与摆放", "5. Viewport & Placement"), _sectionHeaderStyle);
             EditorGUILayout.Space(4f);
 
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.Label(L("摆放位置", "Placement"), EditorStyles.miniLabel, GUILayout.Width(_isChinese ? 54f : 62f));
+            DrawPlacementPresetButton(descriptor, UniTextPlacementPreset.RightSide, L("右肩侧", "Right"));
+            DrawPlacementPresetButton(descriptor, UniTextPlacementPreset.LeftSide, L("左肩侧", "Left"));
+            DrawPlacementPresetButton(descriptor, UniTextPlacementPreset.AboveHead, L("头顶", "Head"));
+            DrawPlacementPresetButton(descriptor, UniTextPlacementPreset.Custom, L("手动", "Manual"));
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(3f);
             EditorGUILayout.BeginHorizontal();
             DrawViewportPresetButton(L("标准 0.84×0.26 · 6行", "Standard 0.84×0.26 · 6r"), 0.84f, 0.2625f, 6);
             DrawViewportPresetButton(L("长句 0.84×0.35 · 8行", "Long 0.84×0.35 · 8r"), 0.84f, 0.35f, 8);
@@ -959,6 +980,41 @@ namespace UniText.Editor
                 );
             }
             EditorGUILayout.EndVertical();
+        }
+
+        private void DrawPlacementPresetButton(VRCAvatarDescriptor descriptor, UniTextPlacementPreset preset, string label)
+        {
+            bool isMatch = _placementPreset == preset;
+            Color prevBg = GUI.backgroundColor;
+            if (isMatch)
+            {
+                GUI.backgroundColor = new Color(0.45f, 0.78f, 1.0f, 1.0f);
+            }
+
+            GUIStyle style = isMatch ? _selectedMiniButtonStyle : EditorStyles.miniButton;
+            if (GUILayout.Button(label, style))
+            {
+                _placementPreset = preset;
+                if (preset == UniTextPlacementPreset.Custom)
+                {
+                    _autoPositionToBone = false;
+                }
+                else
+                {
+                    _boardAnchor = UniTextProp.GetPresetAnchor(preset);
+                    _autoPositionToBone = true;
+                    _boneOffset = UniTextPlacementUtility.ComputeAdaptiveBoneOffset(
+                        descriptor != null ? descriptor.gameObject : null,
+                        preset,
+                        _followBone,
+                        UniTextPlacementUtility.GetDefaultPresetOffset(preset)
+                    );
+                }
+                ClearStatusMessage();
+                GUIUtility.keyboardControl = 0;
+            }
+
+            GUI.backgroundColor = prevBg;
         }
 
         private void DrawViewportPresetButton(string label, float width, float height, int rows)
@@ -1041,7 +1097,7 @@ namespace UniText.Editor
             EditorGUILayout.EndVertical();
         }
 
-        private void DrawAdvancedSection()
+        private void DrawAdvancedSection(VRCAvatarDescriptor descriptor)
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             _showAdvanced = EditorGUILayout.Foldout(
@@ -1056,16 +1112,35 @@ namespace UniText.Editor
                 float prevLabelWidth = EditorGUIUtility.labelWidth;
                 EditorGUIUtility.labelWidth = _isChinese ? 96f : 118f;
 
+                _boardAnchor = (UniTextBoardAnchor)EditorGUILayout.EnumPopup(
+                    L("面板锚点", "Board Anchor"),
+                    _boardAnchor
+                );
+
                 _useBoneProxy = EditorGUILayout.ToggleLeft(
                     L("启用骨骼绑定 (MA Bone Proxy)", "Use MA Bone Proxy"),
                     _useBoneProxy
                 );
 
                 EditorGUI.BeginDisabledGroup(!_useBoneProxy);
-                _followBone = (HumanBodyBones)EditorGUILayout.EnumPopup(
-                    L("跟随骨骼", "Follow Bone"),
-                    _followBone
+                EditorGUI.BeginChangeCheck();
+                _followBone = UniTextPlacementUtility.DrawFollowBonePopup(
+                    new GUIContent(
+                        L("跟随骨骼", "Follow Bone"),
+                        L("未开启世界固定时，字幕板跟随的 Humanoid 主骨骼。", "Humanoid bone that SideFollowAnchor follows when not in World Drop mode.")
+                    ),
+                    _followBone,
+                    _isChinese
                 );
+                if (EditorGUI.EndChangeCheck() && _autoPositionToBone && _placementPreset != UniTextPlacementPreset.Custom && descriptor != null)
+                {
+                    _boneOffset = UniTextPlacementUtility.ComputeAdaptiveBoneOffset(
+                        descriptor.gameObject,
+                        _placementPreset,
+                        _followBone,
+                        UniTextProp.DefaultBoneOffset
+                    );
+                }
                 _autoPositionToBone = EditorGUILayout.ToggleLeft(
                     L("自动对齐骨骼偏移", "Auto-Align to Bone"),
                     _autoPositionToBone
@@ -1075,9 +1150,25 @@ namespace UniText.Editor
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.Label(L("相对偏移 (m)", "Bone Offset (m)"));
                 GUILayout.FlexibleSpace();
+                EditorGUI.BeginDisabledGroup(descriptor == null);
+                if (GUILayout.Button(L("自动适配", "Auto-Fit"), EditorStyles.miniButton, GUILayout.Width(64f)))
+                {
+                    UniTextPlacementPreset fitPreset = _placementPreset == UniTextPlacementPreset.Custom
+                        ? UniTextPlacementPreset.RightSide
+                        : _placementPreset;
+                    _boneOffset = UniTextPlacementUtility.ComputeAdaptiveBoneOffset(
+                        descriptor.gameObject,
+                        fitPreset,
+                        _followBone,
+                        UniTextProp.DefaultBoneOffset
+                    );
+                    ClearStatusMessage();
+                    GUIUtility.keyboardControl = 0;
+                }
+                EditorGUI.EndDisabledGroup();
                 if (GUILayout.Button(L("重置", "Reset"), EditorStyles.miniButton, GUILayout.Width(52f)))
                 {
-                    _boneOffset = DefaultBoneOffset;
+                    _boneOffset = UniTextProp.DefaultBoneOffset;
                     ClearStatusMessage();
                     GUIUtility.keyboardControl = 0;
                 }
@@ -1153,10 +1244,11 @@ namespace UniText.Editor
                 {
                     Transform fallback = UniTextNdmfPlugin.ResolveHumanoidBone(descriptor.gameObject, _followBone);
                     string fallbackName = fallback != null ? fallback.name : L("根节点", "prop root");
+                    string boneLabel = UniTextPlacementUtility.GetFollowBoneDisplayName(_followBone, _isChinese);
                     EditorGUILayout.HelpBox(
                         L(
-                            $"Avatar 未映射骨骼 \"{_followBone}\"，构建时将自动回退绑定到 \"{fallbackName}\"。",
-                            $"Bone '{_followBone}' is not mapped on this Avatar; build will fall back to '{fallbackName}'."
+                            $"Avatar 未映射骨骼 \"{boneLabel}\"，构建时将自动回退绑定到 \"{fallbackName}\"。",
+                            $"Bone '{boneLabel}' is not mapped on this Avatar; build will fall back to '{fallbackName}'."
                         ),
                         MessageType.Info
                     );
@@ -1295,6 +1387,8 @@ namespace UniText.Editor
             int propRowPx = Mathf.Clamp(Mathf.RoundToInt(prop.rowPx / 8f) * 8, UniTextProp.MinRowPx, UniTextProp.MaxRowPx);
 
             return prop.tier != _tier
+                || prop.placementPreset != _placementPreset
+                || prop.boardAnchor != _boardAnchor
                 || prop.useBoneProxy != _useBoneProxy
                 || prop.followBone != _followBone
                 || prop.autoPositionToBone != _autoPositionToBone
@@ -1564,6 +1658,8 @@ namespace UniText.Editor
             so.Update();
 
             SetIntProp(so, "tier", (int)tier);
+            SetIntProp(so, "placementPreset", (int)_placementPreset);
+            SetIntProp(so, "boardAnchor", (int)_boardAnchor);
             SetBoolProp(so, "useBoneProxy", _useBoneProxy);
             SetIntProp(so, "followBone", (int)_followBone);
             SetBoolProp(so, "autoPositionToBone", _autoPositionToBone);
@@ -1593,46 +1689,12 @@ namespace UniText.Editor
                 return;
             }
 
-            Transform boardPivot = propRoot.transform.Find("BoardPivot");
-            Transform displayQuad = boardPivot != null ? boardPivot.Find("DisplayQuad") : null;
-            if (displayQuad != null)
-            {
-                Undo.RecordObject(displayQuad, "Resize UniText DisplayQuad Preview");
-                displayQuad.localScale = new Vector3(
-                    Mathf.Clamp(_viewportWidth, UniTextProp.MinViewportWidth, UniTextProp.MaxViewportWidth),
-                    Mathf.Clamp(_viewportHeight, UniTextProp.MinViewportHeight, UniTextProp.MaxViewportHeight),
-                    1f
-                );
-                PrefabUtility.RecordPrefabInstancePropertyModifications(displayQuad);
-            }
-
-            if (!_useBoneProxy || !_autoPositionToBone || descriptor == null)
-            {
-                return;
-            }
-
-            Transform targetBone = UniTextNdmfPlugin.ResolveHumanoidBone(descriptor.gameObject, _followBone);
-            if (targetBone == null)
-            {
-                return;
-            }
-
-            Transform anchor = propRoot.transform.Find("SideFollowAnchor");
-            if (anchor == null || boardPivot == null)
-            {
-                return;
-            }
-
-            Vector3 worldPos = targetBone.position + descriptor.transform.TransformDirection(_boneOffset);
-            Quaternion worldRot = descriptor.transform.rotation;
-
-            Undo.RecordObject(anchor, "Align UniText SideFollowAnchor");
-            anchor.SetPositionAndRotation(worldPos, worldRot);
-            PrefabUtility.RecordPrefabInstancePropertyModifications(anchor);
-
-            Undo.RecordObject(boardPivot, "Align UniText BoardPivot");
-            boardPivot.SetPositionAndRotation(worldPos, worldRot);
-            PrefabUtility.RecordPrefabInstancePropertyModifications(boardPivot);
+            UniTextProp prop = propRoot.GetComponent<UniTextProp>();
+            UniTextPlacementUtility.ApplyTransformPreview(
+                descriptor != null ? descriptor.gameObject : null,
+                prop,
+                recordUndo: true
+            );
         }
 
         private static bool HasValidPropHierarchy(GameObject root)

@@ -48,10 +48,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   tier: 1
+  placementPreset: 0
+  boardAnchor: 1
   useBoneProxy: 1
   followBone: 8
   autoPositionToBone: 1
-  boneOffset: {x: 0.48, y: 0.18, z: 0.16}
+  boneOffset: {x: 0.28, y: 0.14, z: 0.16}
   syncWorldDrop: 1
   syncWideRows: 1
   installMenu: 1
@@ -92,13 +94,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 100001}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.48, y: 1.35, z: 0.16}
+  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
+  m_LocalPosition: {x: 0.28, y: 1.2, z: 0.16}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 400000}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
 --- !u!1 &100002
 GameObject:
   m_ObjectHideFlags: 0
@@ -123,14 +125,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 100002}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.48, y: 1.35, z: 0.16}
+  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
+  m_LocalPosition: {x: 0.28, y: 1.2, z: 0.16}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 400003}
   m_Father: {fileID: 400000}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
 --- !u!1 &100003
 GameObject:
   m_ObjectHideFlags: 0
@@ -158,7 +160,7 @@ Transform:
   m_GameObject: {fileID: 100003}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: -0.42, y: 0.13125, z: 0}
   m_LocalScale: {x: 0.84, y: 0.2625, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

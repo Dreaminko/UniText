@@ -160,8 +160,8 @@ def detect_viewport_from_oscquery_tree(tree: dict) -> Tuple[int, int, int, bool]
     rows, row_px = resolve_live_viewport(
         base_rows,
         base_row_px,
-        values.get("UniText_Width", 0.0),
-        values.get("UniText_Height", 0.0),
+        values.get("UniText_Width", 0.5),
+        values.get("UniText_Height", 0.5),
         wide_rows=(row_cells == WIDE_COLS),
     )
     has_row_page = "UniText_RowPage" in names

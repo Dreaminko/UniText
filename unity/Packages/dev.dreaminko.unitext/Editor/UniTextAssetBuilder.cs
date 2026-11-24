@@ -148,13 +148,60 @@ namespace UniText.Editor
         }
 
         /// <summary>
-        /// Builds a clean 1-slot wrapper Expressions Menu containing the UniText submenu.
+        /// Builds a clean 1-slot wrapper Expressions Menu containing the UniText submenu
+        /// and a nested Appearance submenu for Scale, Opacity, and optional Width / Height.
         /// </summary>
         public static VRCExpressionsMenu CreateMenuHierarchyInMemory(
             string menuName,
             Action<UnityEngine.Object> saveAsset,
             bool allowRuntimeResize = true)
         {
+            var appearanceMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+            appearanceMenu.name = "UniText_AppearanceMenu";
+            appearanceMenu.controls = new List<VRCExpressionsMenu.Control>
+            {
+                new VRCExpressionsMenu.Control
+                {
+                    name = "Scale",
+                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
+                    subParameters = new[]
+                    {
+                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Scale" }
+                    }
+                },
+                new VRCExpressionsMenu.Control
+                {
+                    name = "Opacity",
+                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
+                    subParameters = new[]
+                    {
+                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Opacity" }
+                    }
+                }
+            };
+            if (allowRuntimeResize)
+            {
+                appearanceMenu.controls.Add(new VRCExpressionsMenu.Control
+                {
+                    name = "Width",
+                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
+                    subParameters = new[]
+                    {
+                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Width" }
+                    }
+                });
+                appearanceMenu.controls.Add(new VRCExpressionsMenu.Control
+                {
+                    name = "Height",
+                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
+                    subParameters = new[]
+                    {
+                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Height" }
+                    }
+                });
+            }
+            saveAsset?.Invoke(appearanceMenu);
+
             var subMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
             subMenu.name = "UniText_SubMenu";
             subMenu.controls = new List<VRCExpressionsMenu.Control>
@@ -182,43 +229,18 @@ namespace UniText.Editor
                 },
                 new VRCExpressionsMenu.Control
                 {
-                    name = "Scale",
-                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
-                    subParameters = new[]
-                    {
-                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Scale" }
-                    }
-                },
-                new VRCExpressionsMenu.Control
-                {
-                    name = "Opacity",
-                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
-                    subParameters = new[]
-                    {
-                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Opacity" }
-                    }
-                },
-                new VRCExpressionsMenu.Control
-                {
                     name = "Clear Screen",
                     type = VRCExpressionsMenu.Control.ControlType.Button,
                     parameter = new VRCExpressionsMenu.Control.Parameter { name = "UniText_LocalClear" },
                     value = 1f
+                },
+                new VRCExpressionsMenu.Control
+                {
+                    name = "Appearance",
+                    type = VRCExpressionsMenu.Control.ControlType.SubMenu,
+                    subMenu = appearanceMenu
                 }
             };
-            if (allowRuntimeResize)
-            {
-                subMenu.controls.Add(new VRCExpressionsMenu.Control
-                {
-                    name = "Resize (W/H)",
-                    type = VRCExpressionsMenu.Control.ControlType.TwoAxisPuppet,
-                    subParameters = new[]
-                    {
-                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Width" },
-                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Height" }
-                    }
-                });
-            }
             saveAsset?.Invoke(subMenu);
 
             var rootWrapper = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
@@ -464,8 +486,10 @@ namespace UniText.Editor
             {
                 mat.SetTexture("_AuxTex", auxTex);
             }
-            // Prefabs default to allowRuntimeResize = true; NDMF re-bakes this per UniTextProp.
+            // Prefabs default to allowRuntimeResize = true and BottomRight inner-bottom anchor; NDMF re-bakes per UniTextProp.
             mat.SetFloat("_LiveGeometry", 1f);
+            Vector2 defaultAnchor = UniTextProp.GetAnchorNormalized(UniTextBoardAnchor.BottomRight);
+            mat.SetVector("_AnchorOffset", new Vector4(defaultAnchor.x, defaultAnchor.y, 0f, 0f));
             EditorUtility.SetDirty(mat);
             return mat;
         }
@@ -730,10 +754,12 @@ namespace UniText.Editor
             {
                 var prop = root.AddComponent<UniTextProp>();
                 prop.tier = tier;
+                prop.placementPreset = UniTextPlacementPreset.RightSide;
+                prop.boardAnchor = UniTextBoardAnchor.BottomRight;
                 prop.useBoneProxy = true;
                 prop.followBone = HumanBodyBones.Chest;
                 prop.autoPositionToBone = true;
-                prop.boneOffset = new Vector3(0.48f, 0.18f, 0.16f);
+                prop.boneOffset = UniTextProp.DefaultBoneOffset;
                 prop.syncWorldDrop = true;
                 prop.syncWideRows = true;
                 prop.installMenu = true;
@@ -752,19 +778,19 @@ namespace UniText.Editor
 
                 var anchor = new GameObject("SideFollowAnchor");
                 anchor.transform.SetParent(root.transform, false);
-                anchor.transform.localPosition = new Vector3(0.48f, 1.35f, 0.16f);
-                anchor.transform.localRotation = Quaternion.identity;
+                anchor.transform.localPosition = new Vector3(0.28f, 1.20f, 0.16f);
+                anchor.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
 
                 // Kept active in Edit Mode for Scene positioning; NDMF disables until UniText_Visible = true
                 var boardPivot = new GameObject("BoardPivot");
                 boardPivot.transform.SetParent(root.transform, false);
                 boardPivot.transform.localPosition = anchor.transform.localPosition;
-                boardPivot.transform.localRotation = Quaternion.identity;
+                boardPivot.transform.localRotation = anchor.transform.localRotation;
 
                 var displayQuad = GameObject.CreatePrimitive(PrimitiveType.Quad);
                 displayQuad.name = "DisplayQuad";
                 displayQuad.transform.SetParent(boardPivot.transform, false);
-                displayQuad.transform.localPosition = Vector3.zero;
+                displayQuad.transform.localPosition = prop.GetDisplayQuadLocalPosition();
                 displayQuad.transform.localScale = new Vector3(0.84f, 0.2625f, 1f);
                 UnityEngine.Object.DestroyImmediate(displayQuad.GetComponent<Collider>());
 
