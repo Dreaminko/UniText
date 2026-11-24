@@ -19,11 +19,11 @@ UniText enables VRChat PC avatars to display **real-time, shared, multilingual (
 
 ### Method 1: VCC / VRChat Creator Companion (Recommended)
 
-1. Click **[Add UniText to VCC](vcc://vpm/addRepo?url=https://vpm.dreamo.ink/index.json)** (or visit [https://vpm.dreamo.ink/](https://vpm.dreamo.ink/)), or manually add the VPM Repository URL in VCC (`Settings → Packages → Add Repository`):
+1. Click **[Add Dreaminko's VPM Repository to VCC](vcc://vpm/addRepo?url=https://vpm.dreamo.ink/index.json)** (or visit [Dreaminko's VPM Repository](https://vpm.dreamo.ink/)), or manually add the VPM Repository URL in VCC (`Settings → Packages → Add Repository`):
    ```text
    https://vpm.dreamo.ink/index.json
    ```
-2. In your Avatar project in VCC, add **`UniText`** (`dev.dreaminko.unitext`). VCC will automatically install `com.vrchat.avatars`, `nadena.dev.modular-avatar`, and `nadena.dev.ndmf`.
+2. In your Avatar project in VCC, add **`UniText`** (`dev.dreaminko.unitext`) from **Dreaminko's VPM Repository**. VCC will automatically install `com.vrchat.avatars`, `nadena.dev.modular-avatar`, and `nadena.dev.ndmf`.
 3. Open Unity (`2022.3.22f1`), click **`UniText → Install to Avatar`** (or **`Tools → UniText → Install to Avatar`**) in the top menu bar, drag your **Avatar** from the Scene Hierarchy into the window, choose your tier, and click **Install** (or manually drag one of the prefabs from `Packages/dev.dreaminko.unitext/Prefabs/` onto your Avatar root). Upload or enter Play Mode to preview!
 
 ### Method 2: Offline `.unitypackage` (Fallback)

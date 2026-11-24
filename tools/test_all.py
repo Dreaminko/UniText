@@ -1435,34 +1435,30 @@ def test_unity_package_integrity() -> None:
 
 
 def test_vpm_packaging_dry_run() -> None:
-    print("[6/6] Testing VPM pack + listing generation...")
-    script = REPO_ROOT / "tools" / "vpm" / "build_listing.py"
+    print("[6/6] Testing VPM package archive generation...")
+    script = REPO_ROOT / "tools" / "vpm" / "pack_vpm.py"
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         dist_dir = tmp_path / "dist"
-        site_dir = tmp_path / "_site"
+        dist_dir_2 = tmp_path / "dist2"
 
-        subprocess.run([sys.executable, str(script), "pack", "--out-dir", str(dist_dir)], check=True)
-        subprocess.run(
-            [
-                sys.executable,
-                str(script),
-                "listing",
-                "--offline",
-                "--out-dir",
-                str(site_dir),
-                "--local-package-json",
-                str(dist_dir / "package.json"),
-            ],
-            check=True,
-        )
+        subprocess.run([sys.executable, str(script), "--out-dir", str(dist_dir)], check=True)
+        subprocess.run([sys.executable, str(script), "--out-dir", str(dist_dir_2)], check=True)
 
         manifest = json.loads((PKG_DIR / "package.json").read_text(encoding="utf-8"))
         version = manifest["version"]
         zip_path = dist_dir / f"dev.dreaminko.unitext-{version}.zip"
         assert zip_path.is_file()
+
         pkg_meta = json.loads((dist_dir / "package.json").read_text(encoding="utf-8"))
+        pkg_meta_2 = json.loads((dist_dir_2 / "package.json").read_text(encoding="utf-8"))
+        assert pkg_meta["name"] == "dev.dreaminko.unitext"
+        assert pkg_meta["version"] == version
+        assert pkg_meta["url"] == (
+            f"https://github.com/Dreaminko/UniText/releases/download/{version}/dev.dreaminko.unitext-{version}.zip"
+        )
         assert pkg_meta["zipSHA256"] == hashlib.sha256(zip_path.read_bytes()).hexdigest()
+        assert pkg_meta["zipSHA256"] == pkg_meta_2["zipSHA256"], "VPM archive must be deterministic"
 
         with zipfile.ZipFile(zip_path) as zf:
             names = set(zf.namelist())
@@ -1479,10 +1475,8 @@ def test_vpm_packaging_dry_run() -> None:
                 "Prefabs/Board_Standard_73b.prefab",
             ):
                 assert required in names, f"Missing '{required}' inside VPM zip"
-
-        listing = json.loads((site_dir / "index.json").read_text(encoding="utf-8"))
-        assert listing["id"] == "dev.dreaminko.unitext.vpm"
-        assert version in listing["packages"]["dev.dreaminko.unitext"]["versions"]
+            zipped_manifest = json.loads(zf.read("package.json").decode("utf-8"))
+            assert zipped_manifest["version"] == version
 
 
 def main() -> int:

@@ -38,7 +38,6 @@ venv/
 .pytest_cache/
 .cache/
 *.preview.png
-_site/
 dist/
 
 # OS files
