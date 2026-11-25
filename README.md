@@ -54,7 +54,7 @@ UniText prefabs never modify your base Avatar Animator Controller, Expression Pa
 - **Automatic Bone Attachment (`MA Bone Proxy`)**: Attaches `SideFollowAnchor` to the configured humanoid bone (defaults to `Chest`, with optional auto-offset alignment) and binds `BoardPivot` via `VRCParentConstraint` for seamless Side Follow / World Drop.
 - **Direct BlendTree FX Merge (`MA Merge Animator`)**: Generates the tier's Direct BlendTree FX layer in memory and merges it using `MergeAnimatorPathMode.Relative` and `matchAvatarWriteDefaults = true`.
 - **Automatic Parameters (`MA Parameters`)**: Registers `UniText_Visible`, `UniText_Ctrl`, `UniText_D0..D{N-1}`, optional synced `UniText_WorldDrop`, `UniText_Bank` (Wide Rows), and `UniText_RowPage` (`> 6` rows), plus local-only UI controls (`Width`, `Height`, `Scale`, `Opacity`) and viewport geometry markers (`UniText_Rows`, `UniText_RowPx8`).
-- **Clean Single-Slot Submenu (`MA Menu Installer`)**: Installs a single `"UniText"` submenu entry without cluttering your root Expressions Menu.
+- **Editable Hierarchy Submenu (`MA Menu Installer` + `MA Menu Item`)**: Generates an editable `"UniText"` submenu hierarchy under your prop (`MA Menu Installer` + `MA Menu Item` nodes) so you can rename entries, assign icons, reorder items, tweak defaults, or reparent controls into other avatar menus directly in the Hierarchy, with automatic build-time fallback if left ungenerated.
 - **Automatic Quest/Android Stripping**: When `stripOnAndroid` is enabled (default), UniText automatically removes itself on Android builds without touching your PC prefab setup.
 
 ### In-Game Expressions Menu
@@ -136,5 +136,5 @@ Open `unity/` in **Unity 2022.3.22f1** (with `com.vrchat.avatars`, `nadena.dev.m
 - [Protocol Specification (`v2`)](docs/PROTOCOL.md) — CRT memory layout, OSC parameters, command opcodes, and sender rules
 - [Custom Skin & Prop Authoring Guide](docs/SKIN_GUIDE.md) — `UniTextCommon.cginc` API and custom shader authoring
 - [Protocol Test Vectors](spec/test-vectors.json) — Reference verification vectors for sender implementations
-- [Third-Party Licenses](THIRD_PARTY_LICENSES.md) — Bundled [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) (`SIL OFL-1.1`) and tool attributions
+- [Third-Party Licenses](THIRD_PARTY_LICENSES.md) — Bundled [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font) (`SIL OFL-1.1`), [Google Material Symbols](https://github.com/google/material-design-icons) (`Apache-2.0`), and tool attributions
 - [MIT License](LICENSE)

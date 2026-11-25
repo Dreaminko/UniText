@@ -54,7 +54,7 @@ UniText 的 Prefab 绝不会直接改写你磁盘上的基础 Animator Controlle
 - **自动骨骼绑定（`MA Bone Proxy`）**：将 `SideFollowAnchor` 挂载到配置的人形骨骼（默认 `Chest`，支持自动对齐偏移），并通过 `VRCParentConstraint` 绑定 `BoardPivot`，实现平滑的侧身跟随与世界放置切换。
 - **Direct BlendTree FX 合并（`MA Merge Animator`）**：在内存中生成对应档位的 Direct BlendTree FX 图层，并以 `MergeAnimatorPathMode.Relative` 和 `matchAvatarWriteDefaults = true` 进行合并。
 - **自动参数注册（`MA Parameters`）**：注册 `UniText_Visible`、`UniText_Ctrl`、`UniText_D0..D{N-1}`，以及可选同步参数 `UniText_WorldDrop`、`UniText_Bank`（宽行）和 `UniText_RowPage`（`> 6` 行），同时附加仅限本地的 UI 控制参数（`Width`、`Height`、`Scale`、`Opacity`）与视口几何标记（`UniText_Rows`、`UniText_RowPx8`）。
-- **单入口子菜单安装（`MA Menu Installer`）**：仅在 Expressions Menu 中安装单个 `"UniText"` 子菜单入口，避免弄乱主菜单槽位。
+- **可编辑层级菜单（`MA Menu Installer` + `MA Menu Item`）**：在组件下直接生成可编辑的 `"UniText"` 子菜单层级（`MA Menu Installer` + `MA Menu Item`），方便直接在 Hierarchy 中改名、配置图标、调整顺序、设置默认值或拖拽移动到其他菜单；若未提前生成，构建时也会自动兜底生成。
 - **Quest / Android 自动剥离**：默认开启 `stripOnAndroid` 时，构建 Android 平台 Avatar 会自动移除 UniText 组件与节点，同时完全保留 PC 端配置。
 
 ### 游戏内表情菜单控制
@@ -136,5 +136,5 @@ python tools/osc-tester/send_demo.py --oscquery-url http://127.0.0.1:9001/avatar
 - [协议规范 (`v2`)](docs/PROTOCOL.md) — CRT 内存布局、OSC 参数定义、指令集与发送端规范
 - [自定义外观与挂件制作指南](docs/SKIN_GUIDE.md) — `UniTextCommon.cginc` 接口说明与自定义着色器开发
 - [协议测试向量](spec/test-vectors.json) — 供发送端实现进行校验的标准测试向量
-- [第三方许可声明](THIRD_PARTY_LICENSES.md) — 内置 [Fusion Pixel Font（缝合像素字体）](https://github.com/TakWolf/fusion-pixel-font)（`SIL OFL-1.1`）与依赖说明
+- [第三方许可声明](THIRD_PARTY_LICENSES.md) — 内置 [Fusion Pixel Font（缝合像素字体）](https://github.com/TakWolf/fusion-pixel-font)（`SIL OFL-1.1`）、[Google Material Symbols](https://github.com/google/material-design-icons)（`Apache-2.0`）与依赖说明
 - [MIT License](LICENSE)

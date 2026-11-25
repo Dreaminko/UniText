@@ -54,7 +54,7 @@ UniText のプレハブは、アバターの Animator Controller、Expression Pa
 - **自動ボーン追従（`MA Bone Proxy`）**: `SideFollowAnchor` を指定された Humanoid ボーン（デフォルトは `Chest`、自動オフセット調整対応）に配置し、`BoardPivot` を `VRCParentConstraint` で接続してサイド追従と World Drop をシームレスに切り替えます。
 - **Direct BlendTree FX マージ（`MA Merge Animator`）**: 選択したティア用の Direct BlendTree FX レイヤーをメモリ上で生成し、`MergeAnimatorPathMode.Relative` および `matchAvatarWriteDefaults = true` でマージします。
 - **パラメータ自動登録（`MA Parameters`）**: `UniText_Visible`、`UniText_Ctrl`、`UniText_D0..D{N-1}`、オプションの同期パラメータ `UniText_WorldDrop`、`UniText_Bank`（ワイド行）、`UniText_RowPage`（`> 6` 行）、およびローカル専用 UI 操作（`Width`、`Height`、`Scale`、`Opacity`）とジオメトリマーカー（`UniText_Rows`、`UniText_RowPx8`）を登録します。
-- **1 スロットサブメニュー登録（`MA Menu Installer`）**: ルートの Expressions Menu を圧迫せず、`"UniText"` サブメニュー 1 つだけを追加します。
+- **編集可能な階層サブメニュー（`MA Menu Installer` + `MA Menu Item`）**: プレハブ配下に編集可能な `"UniText"` サブメニュー階層（`MA Menu Installer` + `MA Menu Item`）を生成し、Hierarchy 上で名称変更・アイコン設定・並び替え・デフォルト値調整や他メニューへの移動を直接行えます（未生成の場合はビルド時に自動フォールバック生成されます）。
 - **Quest / Android 自動ストリップ**: `stripOnAndroid` が有効（デフォルト）の場合、Android ビルド時に PC 側のプレハブ設定を変更せず UniText を自動的に除外します。
 
 ### ゲーム内 Expressions Menu 操作
@@ -136,5 +136,5 @@ python tools/osc-tester/send_demo.py --oscquery-url http://127.0.0.1:9001/avatar
 - [プロトコル仕様 (`v2`)](docs/PROTOCOL.md) — CRT メモリレイアウト、OSC パラメータ、コマンド仕様、送信側ルール
 - [カスタムスキン & ギミック作成ガイド](docs/SKIN_GUIDE.md) — `UniTextCommon.cginc` API とカスタムシェーダー開発
 - [プロトコルテストベクター](spec/test-vectors.json) — 送信アプリ実装向けの検証用リファレンスベクター
-- [サードパーティライセンス](THIRD_PARTY_LICENSES.md) — 同梱の [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font)（`SIL OFL-1.1`）および依存ライブラリの帰属表記
+- [サードパーティライセンス](THIRD_PARTY_LICENSES.md) — 同梱の [Fusion Pixel Font](https://github.com/TakWolf/fusion-pixel-font)（`SIL OFL-1.1`）、[Google Material Symbols](https://github.com/google/material-design-icons)（`Apache-2.0`）および依存ライブラリの帰属表記
 - [MIT License](LICENSE)

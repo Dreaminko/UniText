@@ -1277,6 +1277,39 @@ def test_unity_package_integrity() -> None:
         ]:
             assert expected_line in tex_meta, f"{tex_meta_name} missing '{expected_line}'"
 
+    icons_dir = PKG_DIR / "Icons"
+    assert icons_dir.is_dir() and (PKG_DIR / "Icons.meta").is_file(), "Missing Icons/ or Icons.meta"
+    icon_names = (
+        "UniText.png",
+        "Appearance.png",
+        "ShowBoard.png",
+        "WorldDrop.png",
+        "Billboard.png",
+        "ClearScreen.png",
+        "Scale.png",
+        "Opacity.png",
+        "Width.png",
+        "Height.png",
+    )
+    for icon_name in icon_names:
+        icon_path = icons_dir / icon_name
+        assert icon_path.is_file(), f"Missing icon {icon_name}"
+        with Image.open(icon_path) as icon_img:
+            assert icon_img.size == (128, 128) and icon_img.mode == "RGBA", (
+                f"{icon_name} expected 128x128 RGBA, got {icon_img.size} {icon_img.mode}"
+            )
+        icon_meta = (icons_dir / f"{icon_name}.meta").read_text(encoding="utf-8")
+        for expected_line in [
+            "sRGBTexture: 1",
+            "enableMipMap: 0",
+            "alphaIsTransparency: 1",
+            "wrapU: 1",
+            "wrapV: 1",
+            "nPOTScale: 0",
+            "textureType: 0",
+        ]:
+            assert expected_line in icon_meta, f"{icon_name}.meta missing '{expected_line}'"
+
     known_guids: Set[str] = set(guid_map.keys())
     for tier in ("Lite", "Compact", "Balanced", "Standard", "Turbo"):
         crt_txt = (PKG_DIR / "Textures" / f"Buffer_64x32_{tier}.asset").read_text(encoding="utf-8")
@@ -1306,6 +1339,7 @@ def test_unity_package_integrity() -> None:
     assert 'shaderPass = "' not in builder_src
     for tok in (
         "ConfigureAuxImporter",
+        "ConfigureMenuIconImporters",
         "_TIER_LITE",
         "_TIER_BALANCED",
         "UniText_Bank",
@@ -1323,15 +1357,51 @@ def test_unity_package_integrity() -> None:
         "DepthTextureMode.None",
         "allowDynamicResolution = false",
         "encoderQuad.layer = ParamBridgeLayer",
-        "UniText_AppearanceMenu",
-        "saveAsset?.Invoke(appearanceMenu)",
-        "Appearance",
-        'name = "Width"',
-        'name = "Height"',
+        "defaultVisible",
     ):
         assert tok in builder_src, f"UniTextAssetBuilder.cs missing '{tok}'"
-    for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "UniText_ParamCamera", "BuildConstantLayer", "TwoAxisPuppet"):
+    for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "UniText_ParamCamera", "BuildConstantLayer", "TwoAxisPuppet", "CreateMenuHierarchyInMemory"):
         assert legacy_tok not in builder_src, f"UniTextAssetBuilder.cs still contains legacy '{legacy_tok}'"
+
+    menu_util_src = (PKG_DIR / "Editor" / "UniTextMenuUtility.cs").read_text(encoding="utf-8")
+    _check_balanced_braces(menu_util_src, "UniTextMenuUtility.cs")
+    for tok in (
+        "ModularAvatarMenuInstaller",
+        "ModularAvatarMenuItem",
+        "SubmenuSource.Children",
+        "menuToAppend = null",
+        "UniText_Visible",
+        "UniText_WorldDrop",
+        "UniText_Billboard",
+        "UniText_LocalClear",
+        "UniText_Scale",
+        "UniText_Opacity",
+        "UniText_Width",
+        "UniText_Height",
+        "Appearance",
+        "automaticValue",
+        "isSynced",
+        "isSaved",
+        "isDefault",
+        "CollectActiveMenuParameterOverrides",
+        "FindMenuRoot",
+        "IconsDir",
+        "LoadMenuIcon",
+        "GetDefaultIconForParameter",
+        "GetDefaultRootMenuIcon",
+        "ApplyDefaultIconsIfMissing",
+        "IconGuidUniText",
+        "IconGuidAppearance",
+        '"ShowBoard"',
+        '"WorldDrop"',
+        '"Billboard"',
+        '"ClearScreen"',
+        '"Scale"',
+        '"Opacity"',
+        '"Width"',
+        '"Height"',
+    ):
+        assert tok in menu_util_src, f"UniTextMenuUtility.cs missing '{tok}'"
 
     prop_src = (PKG_DIR / "Runtime" / "UniTextProp.cs").read_text(encoding="utf-8")
     for prop_tok in (
@@ -1419,9 +1489,14 @@ def test_unity_package_integrity() -> None:
         'MakeParam("UniText_Width", localFloatType, 0.5f',
         'MakeParam("UniText_Height", localFloatType, 0.5f',
         "UniTextPlacementUtility",
+        "UniTextMenuUtility",
+        "HasUniTextMenuInHierarchy",
+        "CreateMenuHierarchy",
+        "CollectActiveMenuParameterOverrides",
+        "AlignBuildMenuItemSyncFlags",
     ]:
         assert req_token in ndmf_src, f"UniTextNdmfPlugin.cs missing '{req_token}'"
-    for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13"):
+    for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "CreateMenuHierarchyInMemory"):
         assert legacy_tok not in ndmf_src, f"UniTextNdmfPlugin.cs still contains legacy '{legacy_tok}'"
 
     placement_src = (PKG_DIR / "Editor" / "UniTextPlacementUtility.cs").read_text(encoding="utf-8")
@@ -1444,6 +1519,8 @@ def test_unity_package_integrity() -> None:
         "_displayRows",
         "DrawViewportSection",
         "DrawFollowBonePopup",
+        "UniTextMenuUtility",
+        "ApplyMenuSettings",
     ):
         assert req_token in installer_src, f"UniTextInstallerWindow.cs missing '{req_token}'"
     assert "(HumanBodyBones)EditorGUILayout.EnumPopup" not in installer_src, (
@@ -1453,6 +1530,8 @@ def test_unity_package_integrity() -> None:
     prop_editor_src = (PKG_DIR / "Editor" / "UniTextPropEditor.cs").read_text(encoding="utf-8")
     _check_balanced_braces(prop_editor_src, "UniTextPropEditor.cs")
     assert "DrawFollowBoneProperty" in prop_editor_src, "UniTextPropEditor.cs missing 'DrawFollowBoneProperty'"
+    for req_token in ("UniTextMenuUtility", "FindMenuRoot", "CreateMenuHierarchy"):
+        assert req_token in prop_editor_src, f"UniTextPropEditor.cs missing '{req_token}'"
     assert "DrawDefaultInspector()" not in prop_editor_src, (
         "UniTextPropEditor.cs should use DrawFollowBoneProperty instead of DrawDefaultInspector()"
     )
@@ -1516,12 +1595,27 @@ def test_vpm_packaging_dry_run() -> None:
             for required in (
                 "package.json",
                 "Runtime/UniTextProp.cs",
+                "Editor/UniTextMenuUtility.cs",
+                "Editor/UniTextMenuUtility.cs.meta",
                 "Editor/UniTextNdmfPlugin.cs",
                 "Editor/UniTextInstallerWindow.cs",
                 "Shaders/BufferCRT.shader",
                 "Textures/FontAtlas_BMP_Packed.png",
                 "Textures/UniTextAux_64x64.png",
                 "Textures/Buffer_64x32_Standard.asset",
+                "Icons/UniText.png",
+                "Icons/UniText.png.meta",
+                "Icons/Appearance.png",
+                "Icons/Appearance.png.meta",
+                "Icons/ShowBoard.png",
+                "Icons/ShowBoard.png.meta",
+                "Icons/WorldDrop.png",
+                "Icons/Billboard.png",
+                "Icons/ClearScreen.png",
+                "Icons/Scale.png",
+                "Icons/Opacity.png",
+                "Icons/Width.png",
+                "Icons/Height.png",
                 "Prefabs/Board_Compact_45b.prefab",
                 "Prefabs/Board_Standard_73b.prefab",
             ):

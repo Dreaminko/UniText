@@ -67,7 +67,7 @@ Include `Packages/dev.dreaminko.unitext/Shaders/UniTextCommon.cginc` in your cus
 
 1. Drag a UniText prefab (`Board_Lite_33b`, `Board_Compact_45b`, `Board_Balanced_57b`, `Board_Standard_73b`, or `Board_Turbo_137b`) onto your avatar root.
 2. Replace or customize the `DisplayQuad` mesh/material under `BoardPivot` while keeping:
-   - `UniTextProp` on the prefab root (non-destructively expands into `ModularAvatarBoneProxy`, `ModularAvatarMergeAnimator`, `ModularAvatarParameters`, `ModularAvatarMenuInstaller`, and `VRCParentConstraint` during NDMF build)
+   - `UniTextProp` on the prefab root (non-destructively expands into `ModularAvatarBoneProxy`, `ModularAvatarMergeAnimator`, `ModularAvatarParameters`, `ModularAvatarMenuInstaller` / `ModularAvatarMenuItem`, and `VRCParentConstraint` during NDMF build)
    - `SideFollowAnchor` and `BoardPivot` (keep `BoardPivot` active in Edit Mode for scene preview; NDMF hides it at build time until `UniText_Visible` is toggled on)
    - `ParamBridge` (the `8×1` orthographic camera + `EncoderQuad` that feeds `Buffer_64x32_<Tier>`)
 3. If your skin adds extra meshes (frame, bezel, stand), attach them under `BoardPivot` so they automatically follow `UniText_Visible`, `UniText_Scale`, and `UniText_WorldDrop`. Keep total triangle count low and prefer 1–2 material slots to preserve Avatar Performance Rank.

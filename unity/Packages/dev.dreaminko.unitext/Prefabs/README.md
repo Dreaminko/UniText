@@ -11,7 +11,7 @@ Each prefab carries a `UniTextProp` component configured for **NDMF + Modular Av
 - Automatically attaches `SideFollowAnchor` via `ModularAvatarBoneProxy` (defaults to `Chest`)
 - Automatically configures `VRCParentConstraint` (`Side Follow` / `World Drop`)
 - Generates the Direct BlendTree FX `AnimatorController` in memory and attaches `ModularAvatarMergeAnimator`
-- Attaches `ModularAvatarParameters` (local-only `UniText_ProtoVer` / `UniText_Rows` / `UniText_RowPx8` capability markers, optional `UniText_Bank` Wide Rows bit for 64 proportional cells/row, optional `UniText_RowPage`, local-only `UniText_Width` / `UniText_Height` resize axes, and tier payload channels) and a clean single-entry `"UniText"` submenu via `ModularAvatarMenuInstaller`
+- Attaches `ModularAvatarParameters` (local-only `UniText_ProtoVer` / `UniText_Rows` / `UniText_RowPx8` capability markers, optional `UniText_Bank` Wide Rows bit for 64 proportional cells/row, optional `UniText_RowPage`, local-only `UniText_Width` / `UniText_Height` resize axes, and tier payload channels) and manages an editable `"UniText"` submenu hierarchy via `ModularAvatarMenuInstaller` + `ModularAvatarMenuItem` (generated in Scene Hierarchy by the Installer / Inspector, with automatic build-time fallback)
 - Automatically strips itself non-destructively when building for Quest/Android (`stripOnAndroid = true`)
 
 Maintainers can refresh these prefabs at any time via `Tools -> UniText -> Verify & Refresh Package Assets`.

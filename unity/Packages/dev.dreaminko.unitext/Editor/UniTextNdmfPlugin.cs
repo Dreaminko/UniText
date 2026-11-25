@@ -9,7 +9,6 @@ using UnityEditor.Animations;
 using UnityEngine;
 using VRC.Dynamics;
 using VRC.SDK3.Avatars.Components;
-using VRC.SDK3.Avatars.ScriptableObjects;
 using VRC.SDK3.Dynamics.Constraint.Components;
 
 [assembly: ExportsPlugin(typeof(UniText.Editor.UniTextNdmfPlugin))]
@@ -18,7 +17,7 @@ namespace UniText.Editor
 {
     /// <summary>
     /// Non-destructive NDMF build plugin that expands UniTextProp prefabs into
-    /// Modular Avatar components (BoneProxy, MergeAnimator, Parameters, MenuInstaller)
+    /// Modular Avatar components (BoneProxy, MergeAnimator, Parameters, MenuInstaller / MenuItem)
     /// and VRCParentConstraint immediately before Modular Avatar processes the avatar.
     /// </summary>
     public class UniTextNdmfPlugin : Plugin<UniTextNdmfPlugin>
@@ -47,6 +46,7 @@ namespace UniText.Editor
             }
 
             bool isAndroidBuild = EditorUserBuildSettings.activeBuildTarget == BuildTarget.Android;
+            var activeProps = new List<UniTextProp>(props.Length);
 
             foreach (var prop in props)
             {
@@ -62,7 +62,13 @@ namespace UniText.Editor
                     continue;
                 }
 
-                ExpandSingleProp(ctx, prop);
+                activeProps.Add(prop);
+            }
+
+            bool isSingleProp = activeProps.Count == 1;
+            foreach (var prop in activeProps)
+            {
+                ExpandSingleProp(ctx, prop, isSingleProp);
             }
         }
 
@@ -101,7 +107,7 @@ namespace UniText.Editor
             return assigned;
         }
 
-        private static void ExpandSingleProp(BuildContext ctx, UniTextProp prop)
+        private static void ExpandSingleProp(BuildContext ctx, UniTextProp prop, bool isSingleProp)
         {
             GameObject root = prop.gameObject;
             string tierName = prop.TierName;
@@ -251,13 +257,42 @@ namespace UniText.Editor
                 }
             }
 
+            // Ensure MA Menu hierarchy exists when installMenu is enabled without pre-generated MA menu items
+            GameObject menuSearchScope = isSingleProp ? ctx.AvatarRootObject : root;
+            bool hasMaMenu = UniTextMenuUtility.HasUniTextMenuInHierarchy(ctx.AvatarRootObject, includeInactive: true);
+            bool hasRootInstaller = root.GetComponent<ModularAvatarMenuInstaller>() != null;
+            if (!hasMaMenu && !hasRootInstaller && prop.installMenu)
+            {
+                string title = UniTextMenuUtility.SanitizeMenuName(prop.menuName);
+                UniTextMenuUtility.CreateMenuHierarchy(
+                    root,
+                    title,
+                    prop.installTargetMenu,
+                    prop.syncWorldDrop,
+                    prop.allowRuntimeResize,
+                    recordUndo: false
+                );
+            }
+            else if (!prop.allowRuntimeResize)
+            {
+                UniTextMenuUtility.DeactivateResizeMenuItems(menuSearchScope);
+            }
+
+            UniTextMenuUtility.AlignBuildMenuItemSyncFlags(menuSearchScope, prop.syncWorldDrop);
+
+            Dictionary<string, UniTextMenuUtility.MenuParameterOverride> menuOverrides =
+                UniTextMenuUtility.CollectActiveMenuParameterOverrides(ctx.AvatarRootObject);
+            bool visibleDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamVisible, false);
+            bool worldDropDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamWorldDrop, false);
+            bool billboardDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamBillboard, false);
+
             // 2. VRCParentConstraint on BoardPivot (Side Follow / World Drop)
             var constraint = boardPivot.GetComponent<VRCParentConstraint>() ?? boardPivot.gameObject.AddComponent<VRCParentConstraint>();
             constraint.SetSources(new[] { new VRCConstraintSource(anchor, 1f) });
             constraint.GlobalWeight = 1f;
             constraint.IsActive = true;
             constraint.Locked = true;
-            constraint.FreezeToWorld = false;
+            constraint.FreezeToWorld = worldDropDefault;
             constraint.AffectsPositionX = true;
             constraint.AffectsPositionY = true;
             constraint.AffectsPositionZ = true;
@@ -266,15 +301,22 @@ namespace UniText.Editor
             constraint.AffectsRotationZ = false;
             constraint.ApplyConfigurationChanges();
 
-            // Match UniText_Visible default false in built avatar while leaving Edit Mode preview visible
-            boardPivot.gameObject.SetActive(false);
+            // Match UniText_Visible default in built avatar while leaving Edit Mode preview visible
+            boardPivot.gameObject.SetActive(visibleDefault);
+            if (paramCam != null)
+            {
+                paramCam.enabled = visibleDefault;
+            }
 
             // 3. Build Direct BlendTree FX AnimatorController in memory & attach ModularAvatarMergeAnimator
             AnimatorController fxController = UniTextAssetBuilder.BuildFxControllerInMemory(
                 tierName,
                 payloadBytes,
                 asset => ctx.AssetSaver.SaveAsset(asset),
-                prop.HasD4Nibble
+                prop.HasD4Nibble,
+                visibleDefault,
+                worldDropDefault,
+                billboardDefault
             );
 
             var mergeAnimator = root.GetComponent<ModularAvatarMergeAnimator>() ?? root.AddComponent<ModularAvatarMergeAnimator>();
@@ -286,27 +328,18 @@ namespace UniText.Editor
 
             // 4. Attach ModularAvatarParameters
             var maParams = root.GetComponent<ModularAvatarParameters>() ?? root.AddComponent<ModularAvatarParameters>();
-            maParams.parameters = BuildParameterConfigs(payloadBytes, prop.HasD4Nibble, prop.syncWorldDrop, prop.syncWideRows, displayRows, rowPx, prop.allowRuntimeResize);
+            maParams.parameters = BuildParameterConfigs(
+                payloadBytes,
+                prop.HasD4Nibble,
+                prop.syncWorldDrop,
+                prop.syncWideRows,
+                displayRows,
+                rowPx,
+                prop.allowRuntimeResize,
+                menuOverrides
+            );
 
-            // 5. Attach ModularAvatarMenuInstaller (single clean submenu entry)
-            if (prop.installMenu)
-            {
-                string title = string.IsNullOrWhiteSpace(prop.menuName) ? "UniText" : prop.menuName.Trim();
-                VRCExpressionsMenu rootMenu = UniTextAssetBuilder.CreateMenuHierarchyInMemory(
-                    title,
-                    asset => ctx.AssetSaver.SaveAsset(asset),
-                    prop.allowRuntimeResize
-                );
-
-                var menuInstaller = root.GetComponent<ModularAvatarMenuInstaller>() ?? root.AddComponent<ModularAvatarMenuInstaller>();
-                menuInstaller.menuToAppend = rootMenu;
-                if (prop.installTargetMenu != null)
-                {
-                    menuInstaller.installTargetMenu = prop.installTargetMenu;
-                }
-            }
-
-            // 6. Remove UniTextProp marker so no custom script remains on final avatar
+            // 5. Remove UniTextProp marker so no custom script remains on final avatar
             UnityEngine.Object.DestroyImmediate(prop);
         }
 
@@ -349,17 +382,29 @@ namespace UniText.Editor
             bool syncWideRows,
             int displayRows,
             int rowPx,
-            bool allowRuntimeResize)
+            bool allowRuntimeResize,
+            IReadOnlyDictionary<string, UniTextMenuUtility.MenuParameterOverride> menuOverrides)
         {
             bool supportsLocalOnly = HasBoolMember(typeof(ParameterConfig), "localOnly");
             ParameterSyncType localBoolType = supportsLocalOnly ? ParameterSyncType.Bool : ParameterSyncType.NotSynced;
             ParameterSyncType localIntType = supportsLocalOnly ? ParameterSyncType.Int : ParameterSyncType.NotSynced;
             ParameterSyncType localFloatType = supportsLocalOnly ? ParameterSyncType.Float : ParameterSyncType.NotSynced;
 
+            bool visibleDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamVisible, false);
+            bool visibleSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamVisible, true);
+            bool worldDropDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamWorldDrop, false);
+            bool worldDropSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamWorldDrop, false);
+            bool billboardDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamBillboard, false);
+            bool billboardSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamBillboard, true);
+            bool scaleSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamScale, true);
+            bool opacitySaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamOpacity, true);
+            bool widthSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamWidth, true);
+            bool heightSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamHeight, true);
+
             var list = new List<ParameterConfig>
             {
-                MakeParam("UniText_Visible", ParameterSyncType.Bool, 0f, saved: true, internalParam: false, localOnly: false),
-                MakeParam("UniText_WorldDrop", syncWorldDrop ? ParameterSyncType.Bool : localBoolType, 0f, saved: false, internalParam: false, localOnly: !syncWorldDrop),
+                MakeParam("UniText_Visible", ParameterSyncType.Bool, visibleDefault ? 1f : 0f, saved: visibleSaved, internalParam: false, localOnly: false),
+                MakeParam("UniText_WorldDrop", syncWorldDrop ? ParameterSyncType.Bool : localBoolType, worldDropDefault ? 1f : 0f, saved: worldDropSaved, internalParam: false, localOnly: !syncWorldDrop),
                 MakeParam("UniText_Ctrl", ParameterSyncType.Int, 0f, saved: false, internalParam: false, localOnly: false),
             };
 
@@ -394,20 +439,44 @@ namespace UniText.Editor
             list.Add(MakeParam("UniText_ProtoVer", localIntType, UniTextProp.ProtocolVersion, saved: false, internalParam: false, localOnly: true));
             list.Add(MakeParam("UniText_Rows", localIntType, displayRows, saved: false, internalParam: false, localOnly: true));
             list.Add(MakeParam("UniText_RowPx8", localIntType, rowPx / 8f, saved: false, internalParam: false, localOnly: true));
-            list.Add(MakeParam("UniText_Billboard", localBoolType, 0f, saved: true, internalParam: false, localOnly: true));
-            list.Add(MakeParam("UniText_Scale", localFloatType, 0.5f, saved: true, internalParam: false, localOnly: true));
-            list.Add(MakeParam("UniText_Opacity", localFloatType, 1f, saved: true, internalParam: false, localOnly: true));
+            list.Add(MakeParam("UniText_Billboard", localBoolType, billboardDefault ? 1f : 0f, saved: billboardSaved, internalParam: false, localOnly: true));
+            list.Add(MakeParam("UniText_Scale", localFloatType, 0.5f, saved: scaleSaved, internalParam: false, localOnly: true));
+            list.Add(MakeParam("UniText_Opacity", localFloatType, 1f, saved: opacitySaved, internalParam: false, localOnly: true));
             list.Add(MakeParam("UniText_LocalClear", localBoolType, 0f, saved: false, internalParam: false, localOnly: true));
             if (allowRuntimeResize)
             {
                 // Local-only Float (0..1, neutral 0.5 for RadialPuppet): VRCS reads it over OSC, reflows, and broadcasts
                 // the result to every viewer via CMD_SET_GEOMETRY (Ctrl 251), so both puppets cost 0 synced bits.
-                list.Add(MakeParam("UniText_Width", localFloatType, 0.5f, saved: true, internalParam: false, localOnly: true));
-                list.Add(MakeParam("UniText_Height", localFloatType, 0.5f, saved: true, internalParam: false, localOnly: true));
+                list.Add(MakeParam("UniText_Width", localFloatType, 0.5f, saved: widthSaved, internalParam: false, localOnly: true));
+                list.Add(MakeParam("UniText_Height", localFloatType, 0.5f, saved: heightSaved, internalParam: false, localOnly: true));
             }
             list.Add(MakeParam("UniText_One", ParameterSyncType.NotSynced, 1f, saved: false, internalParam: true, localOnly: false));
 
             return list;
+        }
+
+        private static bool ResolveDefault(
+            IReadOnlyDictionary<string, UniTextMenuUtility.MenuParameterOverride> overrides,
+            string paramName,
+            bool fallback)
+        {
+            if (overrides != null && overrides.TryGetValue(paramName, out var ov) && ov.HasMenuItem)
+            {
+                return ov.IsDefault;
+            }
+            return fallback;
+        }
+
+        private static bool ResolveSaved(
+            IReadOnlyDictionary<string, UniTextMenuUtility.MenuParameterOverride> overrides,
+            string paramName,
+            bool fallback)
+        {
+            if (overrides != null && overrides.TryGetValue(paramName, out var ov) && ov.HasMenuItem)
+            {
+                return ov.IsSaved;
+            }
+            return fallback;
         }
 
         private static ParameterConfig MakeParam(

@@ -315,9 +315,23 @@ namespace UniText.Editor
             _boneOffset = prop.boneOffset;
             _syncWorldDrop = prop.syncWorldDrop;
             _syncWideRows = prop.syncWideRows;
-            _installMenu = prop.installMenu;
-            _menuName = string.IsNullOrWhiteSpace(prop.menuName) ? "UniText" : prop.menuName;
-            _installTargetMenu = prop.installTargetMenu;
+
+            VRCAvatarDescriptor avatar = prop.GetComponentInParent<VRCAvatarDescriptor>();
+            GameObject avatarRoot = avatar != null ? avatar.gameObject : null;
+            GameObject menuRoot = UniTextMenuUtility.FindMenuRoot(prop.gameObject, avatarRoot);
+            if (menuRoot != null)
+            {
+                _installMenu = menuRoot.activeInHierarchy;
+                _menuName = UniTextMenuUtility.SanitizeMenuName(menuRoot.name);
+                _installTargetMenu = UniTextMenuUtility.GetInstallTargetMenu(menuRoot, prop.installTargetMenu);
+            }
+            else
+            {
+                _installMenu = prop.installMenu;
+                _menuName = UniTextMenuUtility.SanitizeMenuName(prop.menuName);
+                _installTargetMenu = prop.installTargetMenu;
+            }
+
             _stripOnAndroid = prop.stripOnAndroid;
             _viewportWidth = Mathf.Clamp(prop.viewportWidth, UniTextProp.MinViewportWidth, UniTextProp.MaxViewportWidth);
             _viewportHeight = Mathf.Clamp(prop.viewportHeight, UniTextProp.MinViewportHeight, UniTextProp.MaxViewportHeight);
@@ -504,6 +518,12 @@ namespace UniText.Editor
                     {
                         Selection.activeGameObject = existingProps[0].gameObject;
                         EditorGUIUtility.PingObject(existingProps[0].gameObject);
+                    }
+                    GameObject menuRoot = UniTextMenuUtility.FindMenuRoot(existingProps[0].gameObject, resolvedDescriptor.gameObject);
+                    if (menuRoot != null && GUILayout.Button(L("菜单", "Menu"), GUILayout.Width(52f), GUILayout.Height(20f)))
+                    {
+                        Selection.activeGameObject = menuRoot;
+                        EditorGUIUtility.PingObject(menuRoot);
                     }
                     EditorGUILayout.EndHorizontal();
                 }
@@ -888,8 +908,8 @@ namespace UniText.Editor
 
             _installMenu = EditorGUILayout.ToggleLeft(
                 new GUIContent(
-                    L("安装表情菜单子菜单 (UniText)", "Install Expressions Submenu (UniText)"),
-                    L("通过 Modular Avatar Menu Installer 自动添加显示/固定/朝向/清屏控制，并将缩放/透明度/宽度/高度归类到 Appearance 子菜单。", "Adds Show Board, World Drop, Billboard, Clear Screen, and an Appearance submenu (Scale, Opacity, Width, Height).")
+                    L("安装 MA 表情菜单 (MA Menu Installer + Menu Item)", "Install MA Expressions Menu (Menu Installer + Menu Item)"),
+                    L("以可编辑的 Modular Avatar 菜单层级生成显示/固定/朝向/清屏与 Appearance 子菜单，安装后可直接在 Hierarchy 中修改名称、图标、顺序、默认值或移动到其他菜单。", "Generates an editable Modular Avatar menu hierarchy (Show Board, World Drop, Billboard, Clear Screen, and Appearance submenu) so you can rename, reorder, set icons, or move items directly in Hierarchy.")
                 ),
                 _installMenu
             );
@@ -1187,6 +1207,14 @@ namespace UniText.Editor
                     false
                 );
                 EditorGUI.EndDisabledGroup();
+                if (_installMenu)
+                {
+                    EditorGUILayout.LabelField(
+                        L("提示：安装后可在 Hierarchy 中展开菜单子物体，通过 MA Menu Item 自定义图标、排序、默认值或拖拽移动位置。",
+                          "Tip: Expand the installed menu object in Hierarchy to customize icons, order, defaults, or move items via MA Menu Item."),
+                        _subtitleStyle
+                    );
+                }
 
                 EditorGUILayout.Space(4f);
                 _autoFitRowPx = EditorGUILayout.ToggleLeft(
@@ -1380,8 +1408,30 @@ namespace UniText.Editor
                 return false;
             }
 
-            string currentMenuName = string.IsNullOrWhiteSpace(_menuName) ? "UniText" : _menuName.Trim();
-            string propMenuName = string.IsNullOrWhiteSpace(prop.menuName) ? "UniText" : prop.menuName.Trim();
+            string currentMenuName = UniTextMenuUtility.SanitizeMenuName(_menuName);
+            string propMenuName = UniTextMenuUtility.SanitizeMenuName(prop.menuName);
+
+            VRCAvatarDescriptor avatar = prop.GetComponentInParent<VRCAvatarDescriptor>();
+            GameObject avatarRoot = avatar != null ? avatar.gameObject : null;
+            GameObject menuRoot = UniTextMenuUtility.FindMenuRoot(prop.gameObject, avatarRoot);
+            bool menuChanged;
+            if (menuRoot != null)
+            {
+                bool liveActive = menuRoot.activeInHierarchy;
+                string liveMenuName = UniTextMenuUtility.SanitizeMenuName(menuRoot.name);
+                VRCExpressionsMenu liveTargetMenu = UniTextMenuUtility.GetInstallTargetMenu(menuRoot, prop.installTargetMenu);
+                menuChanged = liveActive != _installMenu
+                    || (_installMenu && !string.Equals(liveMenuName, currentMenuName, StringComparison.Ordinal))
+                    || (_installMenu && UniTextMenuUtility.HasMenuInstaller(menuRoot) && liveTargetMenu != _installTargetMenu);
+            }
+            else
+            {
+                bool hasLooseMenu = avatarRoot != null && UniTextMenuUtility.HasUniTextMenuInHierarchy(avatarRoot, true);
+                menuChanged = (prop.installMenu != _installMenu)
+                    || (_installMenu && !hasLooseMenu)
+                    || !string.Equals(propMenuName, currentMenuName, StringComparison.Ordinal)
+                    || prop.installTargetMenu != _installTargetMenu;
+            }
 
             int clampedRowPx = Mathf.Clamp(Mathf.RoundToInt(_rowPx / 8f) * 8, UniTextProp.MinRowPx, UniTextProp.MaxRowPx);
             int propRowPx = Mathf.Clamp(Mathf.RoundToInt(prop.rowPx / 8f) * 8, UniTextProp.MinRowPx, UniTextProp.MaxRowPx);
@@ -1395,9 +1445,7 @@ namespace UniText.Editor
                 || Vector3.SqrMagnitude(prop.boneOffset - _boneOffset) > 1e-6f
                 || prop.syncWorldDrop != _syncWorldDrop
                 || prop.syncWideRows != _syncWideRows
-                || prop.installMenu != _installMenu
-                || !string.Equals(propMenuName, currentMenuName, StringComparison.Ordinal)
-                || prop.installTargetMenu != _installTargetMenu
+                || menuChanged
                 || prop.stripOnAndroid != _stripOnAndroid
                 || Mathf.Abs(Mathf.Clamp(prop.viewportWidth, UniTextProp.MinViewportWidth, UniTextProp.MaxViewportWidth) - _viewportWidth) > 0.0005f
                 || Mathf.Abs(Mathf.Clamp(prop.viewportHeight, UniTextProp.MinViewportHeight, UniTextProp.MaxViewportHeight) - _viewportHeight) > 0.0005f
@@ -1470,11 +1518,22 @@ namespace UniText.Editor
 
             try
             {
+                string sanitizedMenuName = UniTextMenuUtility.SanitizeMenuName(_menuName);
                 GameObject resultGo;
                 if (canUpdateInPlace)
                 {
                     UniTextProp existingProp = existingProps[0];
                     ApplyPropSettings(existingProp, _tier);
+                    UniTextMenuUtility.ApplyMenuSettings(
+                        existingProp,
+                        descriptor.gameObject,
+                        _installMenu,
+                        sanitizedMenuName,
+                        _installTargetMenu,
+                        _syncWorldDrop,
+                        _allowRuntimeResize,
+                        recordUndo: true
+                    );
                     AlignEditModePreview(descriptor, existingProp.gameObject);
                     resultGo = existingProp.gameObject;
 
@@ -1487,8 +1546,6 @@ namespace UniText.Editor
                 }
                 else
                 {
-                    RemoveExistingProps(descriptor, existingProps);
-
                     GameObject instance = PrefabUtility.InstantiatePrefab(tierPrefab, descriptor.transform) as GameObject;
                     if (instance == null)
                     {
@@ -1498,6 +1555,18 @@ namespace UniText.Editor
                     }
 
                     Undo.RegisterCreatedObjectUndo(instance, "Install UniText Prop");
+
+                    if (existingProps != null && existingProps.Length == 1 && existingProps[0] != null && _installMenu)
+                    {
+                        GameObject preservedMenu = UniTextMenuUtility.FindMenuRootUnderProp(existingProps[0].gameObject);
+                        if (preservedMenu != null && UniTextMenuUtility.CanModifyOrDeleteGameObject(preservedMenu))
+                        {
+                            Undo.SetTransformParent(preservedMenu.transform, instance.transform, "Preserve UniText MA Menu");
+                        }
+                    }
+
+                    RemoveExistingProps(descriptor, existingProps);
+
                     instance.transform.localPosition = Vector3.zero;
                     instance.transform.localRotation = Quaternion.identity;
                     instance.transform.localScale = Vector3.one;
@@ -1507,6 +1576,16 @@ namespace UniText.Editor
                     if (prop != null)
                     {
                         ApplyPropSettings(prop, _tier);
+                        UniTextMenuUtility.ApplyMenuSettings(
+                            prop,
+                            descriptor.gameObject,
+                            _installMenu,
+                            sanitizedMenuName,
+                            _installTargetMenu,
+                            _syncWorldDrop,
+                            _allowRuntimeResize,
+                            recordUndo: true
+                        );
                     }
 
                     AlignEditModePreview(descriptor, instance);

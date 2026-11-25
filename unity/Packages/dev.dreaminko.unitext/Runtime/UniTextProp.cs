@@ -102,10 +102,10 @@ namespace UniText
         [Tooltip("Wide Rows: sync the UniText_Bank column-bank bit (+1 synced bit) so each row holds up to 64 proportional cells (~2x more English per row). Disable to keep 32 cells per row.")]
         public bool syncWideRows = true;
 
-        [Tooltip("Install a UniText submenu into the avatar's VRChat Expressions Menu via Modular Avatar Menu Installer.")]
+        [Tooltip("Install an editable UniText submenu into the avatar's VRChat Expressions Menu using Modular Avatar (MA Menu Installer + MA Menu Item).")]
         public bool installMenu = true;
 
-        [Tooltip("Submenu title added to the avatar Expressions Menu.")]
+        [Tooltip("Submenu title added to the avatar Expressions Menu (synced with the generated MA Menu Item root).")]
         public string menuName = "UniText";
 
 #if UNITEXT_VRCSDK3

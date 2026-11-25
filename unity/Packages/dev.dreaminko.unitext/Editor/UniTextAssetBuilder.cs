@@ -7,7 +7,6 @@ using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
-using VRC.SDK3.Avatars.ScriptableObjects;
 
 namespace UniText.Editor
 {
@@ -17,9 +16,24 @@ namespace UniText.Editor
         internal const int ParamBridgeLayer = 9;
         internal const int ParamCameraCullingMask = (1 << 9) | (1 << 10);
         private const string TexturesDir = PackageRoot + "/Textures";
+        private const string IconsDir = PackageRoot + "/Icons";
         private const string MaterialsDir = PackageRoot + "/Materials";
         private const string PrefabsDir = PackageRoot + "/Prefabs";
         private const string ShadersDir = PackageRoot + "/Shaders";
+
+        private static readonly string[] MenuIconFiles =
+        {
+            "UniText.png",
+            "Appearance.png",
+            "ShowBoard.png",
+            "WorldDrop.png",
+            "Billboard.png",
+            "ClearScreen.png",
+            "Scale.png",
+            "Opacity.png",
+            "Width.png",
+            "Height.png",
+        };
 
         private static readonly (UniTextTier Tier, string Name, int PayloadBytes, int Bits, string PrefabName)[] Tiers =
         {
@@ -57,6 +71,7 @@ namespace UniText.Editor
 
             ConfigureFontAtlasImporter();
             ConfigureAuxImporter();
+            ConfigureMenuIconImporters();
 
             foreach (var tier in Tiers)
             {
@@ -90,7 +105,10 @@ namespace UniText.Editor
             string tierName,
             int payloadBytes,
             Action<UnityEngine.Object> saveAsset,
-            bool hasD4Nibble = false)
+            bool hasD4Nibble = false,
+            bool defaultVisible = false,
+            bool defaultWorldDrop = false,
+            bool defaultBillboard = false)
         {
             var controller = new AnimatorController { name = $"UniText_FX_{tierName}" };
             saveAsset?.Invoke(controller);
@@ -110,12 +128,12 @@ namespace UniText.Editor
                     AddParam(controller, $"UniText_D4b{bit}", AnimatorControllerParameterType.Float, defaultFloat: 0f);
                 }
             }
-            AddParam(controller, "UniText_Visible", AnimatorControllerParameterType.Bool, defaultBool: false);
-            AddParam(controller, "UniText_WorldDrop", AnimatorControllerParameterType.Bool, defaultBool: false);
+            AddParam(controller, "UniText_Visible", AnimatorControllerParameterType.Bool, defaultBool: defaultVisible);
+            AddParam(controller, "UniText_WorldDrop", AnimatorControllerParameterType.Bool, defaultBool: defaultWorldDrop);
             // Column bank & row page (synced Bool in VRCExpressionParameters, Float here so Direct BlendTree drives EncoderQuad)
             AddParam(controller, "UniText_Bank", AnimatorControllerParameterType.Float, defaultFloat: 0f);
             AddParam(controller, "UniText_RowPage", AnimatorControllerParameterType.Float, defaultFloat: 0f);
-            AddParam(controller, "UniText_Billboard", AnimatorControllerParameterType.Float, defaultFloat: 0f);
+            AddParam(controller, "UniText_Billboard", AnimatorControllerParameterType.Float, defaultFloat: defaultBillboard ? 1f : 0f);
             AddParam(controller, "UniText_Scale", AnimatorControllerParameterType.Float, defaultFloat: 0.5f);
             AddParam(controller, "UniText_Opacity", AnimatorControllerParameterType.Float, defaultFloat: 1f);
             AddParam(controller, "UniText_LocalClear", AnimatorControllerParameterType.Float, defaultFloat: 0f);
@@ -130,7 +148,8 @@ namespace UniText.Editor
                 "UniText_Visible",
                 CreateVisibilityClip("Visible_Off", false, saveAsset),
                 CreateVisibilityClip("Visible_On", true, saveAsset),
-                saveAsset
+                saveAsset,
+                defaultVisible
             );
 
             // Layer 2: VRCParentConstraint FreezeToWorld toggle (component type via assembly-qualified name fallback)
@@ -141,122 +160,11 @@ namespace UniText.Editor
                 "UniText_WorldDrop",
                 CreateSingleValueClip("WorldDrop_Follow", "BoardPivot", constraintType, "FreezeToWorld", 0f, saveAsset),
                 CreateSingleValueClip("WorldDrop_Freeze", "BoardPivot", constraintType, "FreezeToWorld", 1f, saveAsset),
-                saveAsset
+                saveAsset,
+                defaultWorldDrop
             );
 
             return controller;
-        }
-
-        /// <summary>
-        /// Builds a clean 1-slot wrapper Expressions Menu containing the UniText submenu
-        /// and a nested Appearance submenu for Scale, Opacity, and optional Width / Height.
-        /// </summary>
-        public static VRCExpressionsMenu CreateMenuHierarchyInMemory(
-            string menuName,
-            Action<UnityEngine.Object> saveAsset,
-            bool allowRuntimeResize = true)
-        {
-            var appearanceMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
-            appearanceMenu.name = "UniText_AppearanceMenu";
-            appearanceMenu.controls = new List<VRCExpressionsMenu.Control>
-            {
-                new VRCExpressionsMenu.Control
-                {
-                    name = "Scale",
-                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
-                    subParameters = new[]
-                    {
-                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Scale" }
-                    }
-                },
-                new VRCExpressionsMenu.Control
-                {
-                    name = "Opacity",
-                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
-                    subParameters = new[]
-                    {
-                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Opacity" }
-                    }
-                }
-            };
-            if (allowRuntimeResize)
-            {
-                appearanceMenu.controls.Add(new VRCExpressionsMenu.Control
-                {
-                    name = "Width",
-                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
-                    subParameters = new[]
-                    {
-                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Width" }
-                    }
-                });
-                appearanceMenu.controls.Add(new VRCExpressionsMenu.Control
-                {
-                    name = "Height",
-                    type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
-                    subParameters = new[]
-                    {
-                        new VRCExpressionsMenu.Control.Parameter { name = "UniText_Height" }
-                    }
-                });
-            }
-            saveAsset?.Invoke(appearanceMenu);
-
-            var subMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
-            subMenu.name = "UniText_SubMenu";
-            subMenu.controls = new List<VRCExpressionsMenu.Control>
-            {
-                new VRCExpressionsMenu.Control
-                {
-                    name = "Show Board",
-                    type = VRCExpressionsMenu.Control.ControlType.Toggle,
-                    parameter = new VRCExpressionsMenu.Control.Parameter { name = "UniText_Visible" },
-                    value = 1f
-                },
-                new VRCExpressionsMenu.Control
-                {
-                    name = "World Drop",
-                    type = VRCExpressionsMenu.Control.ControlType.Toggle,
-                    parameter = new VRCExpressionsMenu.Control.Parameter { name = "UniText_WorldDrop" },
-                    value = 1f
-                },
-                new VRCExpressionsMenu.Control
-                {
-                    name = "Billboard",
-                    type = VRCExpressionsMenu.Control.ControlType.Toggle,
-                    parameter = new VRCExpressionsMenu.Control.Parameter { name = "UniText_Billboard" },
-                    value = 1f
-                },
-                new VRCExpressionsMenu.Control
-                {
-                    name = "Clear Screen",
-                    type = VRCExpressionsMenu.Control.ControlType.Button,
-                    parameter = new VRCExpressionsMenu.Control.Parameter { name = "UniText_LocalClear" },
-                    value = 1f
-                },
-                new VRCExpressionsMenu.Control
-                {
-                    name = "Appearance",
-                    type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                    subMenu = appearanceMenu
-                }
-            };
-            saveAsset?.Invoke(subMenu);
-
-            var rootWrapper = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
-            rootWrapper.name = "UniText_RootEntry";
-            rootWrapper.controls = new List<VRCExpressionsMenu.Control>
-            {
-                new VRCExpressionsMenu.Control
-                {
-                    name = menuName,
-                    type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-                    subMenu = subMenu
-                }
-            };
-            saveAsset?.Invoke(rootWrapper);
-
-            return rootWrapper;
         }
 
         private static void ConfigureFontAtlasImporter()
@@ -273,6 +181,34 @@ namespace UniText.Editor
                 AuxTexturePath,
                 "Run tools/font-atlas/generate_atlas.py first."
             );
+        }
+
+        private static void ConfigureMenuIconImporters()
+        {
+            foreach (string iconFile in MenuIconFiles)
+            {
+                string path = $"{IconsDir}/{iconFile}";
+                var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                if (importer == null)
+                {
+                    continue;
+                }
+
+                bool dirty = false;
+                if (importer.textureType != TextureImporterType.Default) { importer.textureType = TextureImporterType.Default; dirty = true; }
+                if (!importer.sRGBTexture) { importer.sRGBTexture = true; dirty = true; }
+                if (!importer.alphaIsTransparency) { importer.alphaIsTransparency = true; dirty = true; }
+                if (importer.mipmapEnabled) { importer.mipmapEnabled = false; dirty = true; }
+                if (importer.npotScale != TextureImporterNPOTScale.None) { importer.npotScale = TextureImporterNPOTScale.None; dirty = true; }
+                if (importer.filterMode != FilterMode.Bilinear) { importer.filterMode = FilterMode.Bilinear; dirty = true; }
+                if (importer.wrapMode != TextureWrapMode.Clamp) { importer.wrapMode = TextureWrapMode.Clamp; dirty = true; }
+                if (importer.maxTextureSize > 256) { importer.maxTextureSize = 256; dirty = true; }
+
+                if (dirty)
+                {
+                    importer.SaveAndReimport();
+                }
+            }
         }
 
         private static void ConfigureLinearPointTextureImporter(string texturePath, string missingHint)
@@ -656,7 +592,8 @@ namespace UniText.Editor
             string boolParam,
             AnimationClip offClip,
             AnimationClip onClip,
-            Action<UnityEngine.Object> saveAsset)
+            Action<UnityEngine.Object> saveAsset,
+            bool defaultOn = false)
         {
             var sm = new AnimatorStateMachine { name = layerName };
             saveAsset?.Invoke(sm);
@@ -679,7 +616,7 @@ namespace UniText.Editor
             onState.writeDefaultValues = false;
             saveAsset?.Invoke(onState);
 
-            sm.defaultState = offState;
+            sm.defaultState = defaultOn ? onState : offState;
 
             var toOn = offState.AddTransition(onState);
             toOn.hasExitTime = false;
