@@ -1,6 +1,6 @@
 <div align="center">
 
-# UniText
+<img src="Assets/Banner.png" alt="UniText" width="480" />
 
 **English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
 
