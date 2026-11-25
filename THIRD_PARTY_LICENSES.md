@@ -34,6 +34,34 @@ to any document created using the fonts or their derivatives.
 
 ---
 
+## Bundled Menu Icon Assets
+
+### Google Material Symbols
+- **Source**: [google/material-design-icons](https://github.com/google/material-design-icons) ([Material Symbols](https://fonts.google.com/icons))
+- **License**: **Apache License 2.0 (`Apache-2.0`)**
+- **Usage**: Used to create the 128×128 RGBA Expressions Menu icons under `unity/Packages/dev.dreaminko.unitext/Icons/` (`UniText.png`, `Appearance.png`, `ShowBoard.png`, `WorldDrop.png`, `Billboard.png`, `ClearScreen.png`, `Scale.png`, `Opacity.png`, `Width.png`, `Height.png`).
+- **Modification Notice**: The original Material Symbols vector glyphs have been rasterized, sized, and styled into 128×128 RGBA PNG textures with custom colors/backgrounds for VRChat Expressions Menu display.
+
+```text
+Apache License
+Version 2.0, January 2004
+http://www.apache.org/licenses/
+
+Licensed under the Apache License 2.0 (the "License");
+you may not use these files except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+---
+
 ## Unity Package Runtime / Editor Dependencies (External, Declared via VPM)
 
 These packages are not redistributed inside UniText; VCC/VPM installs them automatically from their official repositories:
