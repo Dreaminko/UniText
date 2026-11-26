@@ -13,6 +13,7 @@ namespace UniText.Editor
     {
         public const string DefaultMenuName = "UniText";
         public const string AppearanceMenuName = "Appearance";
+        public const string SelfViewMenuName = "Self View";
         public const string IconsDir = UniTextAssetBuilder.PackageRoot + "/Icons";
 
         private const string IconGuidShowBoard = "e7a100084d9c40008000000000000001";
@@ -25,6 +26,8 @@ namespace UniText.Editor
         private const string IconGuidHeight = "e7a100084d9c40008000000000000008";
         private const string IconGuidUniText = "e7a100084d9c40008000000000000009";
         private const string IconGuidAppearance = "e7a100084d9c4000800000000000000a";
+        private const string IconGuidSelfView = "e7a100084d9c4000800000000000000b";
+        private const string IconGuidFollowHead = "e7a100084d9c4000800000000000000c";
 
         public const string ParamVisible = "UniText_Visible";
         public const string ParamWorldDrop = "UniText_WorldDrop";
@@ -34,6 +37,11 @@ namespace UniText.Editor
         public const string ParamOpacity = "UniText_Opacity";
         public const string ParamWidth = "UniText_Width";
         public const string ParamHeight = "UniText_Height";
+        public const string ParamSelfView = "UniText_SelfView";
+        public const string ParamSelfViewHead = "UniText_SelfViewHead";
+        public const string ParamSelfViewDist = "UniText_SelfViewDist";
+        public const string ParamSelfViewHeight = "UniText_SelfViewHeight";
+        public const string ParamSelfViewScale = "UniText_SelfViewScale";
 
         internal struct MenuParameterOverride
         {
@@ -88,6 +96,11 @@ namespace UniText.Editor
                 case ParamOpacity: return LoadMenuIcon("Opacity", IconGuidOpacity);
                 case ParamWidth: return LoadMenuIcon("Width", IconGuidWidth);
                 case ParamHeight: return LoadMenuIcon("Height", IconGuidHeight);
+                case ParamSelfView: return LoadMenuIcon("SelfView", IconGuidSelfView);
+                case ParamSelfViewHead: return LoadMenuIcon("FollowHead", IconGuidFollowHead);
+                case ParamSelfViewDist: return LoadMenuIcon("Width", IconGuidWidth);
+                case ParamSelfViewHeight: return LoadMenuIcon("Height", IconGuidHeight);
+                case ParamSelfViewScale: return LoadMenuIcon("Scale", IconGuidScale);
                 default: return null;
             }
         }
@@ -100,6 +113,11 @@ namespace UniText.Editor
         public static Texture2D GetDefaultAppearanceMenuIcon()
         {
             return LoadMenuIcon("Appearance", IconGuidAppearance);
+        }
+
+        public static Texture2D GetDefaultSelfViewMenuIcon()
+        {
+            return LoadMenuIcon("SelfView", IconGuidSelfView);
         }
 
         public static bool IsUniTextMenuParameter(string paramName)
@@ -116,7 +134,12 @@ namespace UniText.Editor
                 || string.Equals(paramName, ParamScale, StringComparison.Ordinal)
                 || string.Equals(paramName, ParamOpacity, StringComparison.Ordinal)
                 || string.Equals(paramName, ParamWidth, StringComparison.Ordinal)
-                || string.Equals(paramName, ParamHeight, StringComparison.Ordinal);
+                || string.Equals(paramName, ParamHeight, StringComparison.Ordinal)
+                || string.Equals(paramName, ParamSelfView, StringComparison.Ordinal)
+                || string.Equals(paramName, ParamSelfViewHead, StringComparison.Ordinal)
+                || string.Equals(paramName, ParamSelfViewDist, StringComparison.Ordinal)
+                || string.Equals(paramName, ParamSelfViewHeight, StringComparison.Ordinal)
+                || string.Equals(paramName, ParamSelfViewScale, StringComparison.Ordinal);
         }
 
         public static GameObject CreateMenuHierarchy(
@@ -124,6 +147,7 @@ namespace UniText.Editor
             string menuName,
             VRCExpressionsMenu installTargetMenu,
             bool syncWorldDrop,
+            bool syncBillboard,
             bool allowRuntimeResize,
             bool recordUndo)
         {
@@ -173,7 +197,7 @@ namespace UniText.Editor
                 VRCExpressionsMenu.Control.ControlType.Toggle,
                 ParamBillboard,
                 1f,
-                isSynced: false,
+                isSynced: syncBillboard,
                 isSaved: true,
                 isDefault: false,
                 icon: GetDefaultIconForParameter(ParamBillboard)
@@ -244,6 +268,8 @@ namespace UniText.Editor
                 );
             }
 
+            CreateSelfViewSubMenu(menuRoot.transform, recordUndo: false);
+
             if (recordUndo)
             {
                 Undo.RegisterCreatedObjectUndo(menuRoot, "Create UniText MA Menu");
@@ -251,6 +277,137 @@ namespace UniText.Editor
 
             EditorUtility.SetDirty(menuRoot);
             return menuRoot;
+        }
+
+        public static GameObject CreateSelfViewSubMenu(Transform parent, bool recordUndo)
+        {
+            if (parent == null)
+            {
+                return null;
+            }
+
+            var selfViewGo = new GameObject(SelfViewMenuName);
+            selfViewGo.transform.SetParent(parent, false);
+            var selfViewItem = CreateSubMenuItem(selfViewGo, SelfViewMenuName, GetDefaultSelfViewMenuIcon());
+            EditorUtility.SetDirty(selfViewItem);
+
+            CreateSingleParamItem(
+                selfViewGo.transform,
+                "Enable",
+                VRCExpressionsMenu.Control.ControlType.Toggle,
+                ParamSelfView,
+                1f,
+                isSynced: false,
+                isSaved: true,
+                isDefault: false,
+                icon: GetDefaultIconForParameter(ParamSelfView)
+            );
+            CreateSingleParamItem(
+                selfViewGo.transform,
+                "Follow Head",
+                VRCExpressionsMenu.Control.ControlType.Toggle,
+                ParamSelfViewHead,
+                1f,
+                isSynced: false,
+                isSaved: true,
+                isDefault: false,
+                icon: GetDefaultIconForParameter(ParamSelfViewHead)
+            );
+            CreateSingleParamItem(
+                selfViewGo.transform,
+                "Distance",
+                VRCExpressionsMenu.Control.ControlType.RadialPuppet,
+                ParamSelfViewDist,
+                1f,
+                isSynced: false,
+                isSaved: true,
+                isDefault: false,
+                icon: GetDefaultIconForParameter(ParamSelfViewDist)
+            );
+            CreateSingleParamItem(
+                selfViewGo.transform,
+                "Height",
+                VRCExpressionsMenu.Control.ControlType.RadialPuppet,
+                ParamSelfViewHeight,
+                1f,
+                isSynced: false,
+                isSaved: true,
+                isDefault: false,
+                icon: GetDefaultIconForParameter(ParamSelfViewHeight)
+            );
+            CreateSingleParamItem(
+                selfViewGo.transform,
+                "Scale",
+                VRCExpressionsMenu.Control.ControlType.RadialPuppet,
+                ParamSelfViewScale,
+                1f,
+                isSynced: false,
+                isSaved: true,
+                isDefault: false,
+                icon: GetDefaultIconForParameter(ParamSelfViewScale)
+            );
+
+            if (recordUndo)
+            {
+                Undo.RegisterCreatedObjectUndo(selfViewGo, "Add UniText Self View Menu");
+            }
+
+            EditorUtility.SetDirty(selfViewGo);
+            return selfViewGo;
+        }
+
+        public static bool HasSelfViewMenuInHierarchy(GameObject searchRoot, bool includeInactive = true)
+        {
+            if (searchRoot == null)
+            {
+                return false;
+            }
+
+            foreach (var item in searchRoot.GetComponentsInChildren<ModularAvatarMenuItem>(includeInactive))
+            {
+                if (item == null)
+                {
+                    continue;
+                }
+
+                string paramName = GetControlledParameterName(item);
+                if (string.Equals(paramName, ParamSelfView, StringComparison.Ordinal)
+                    || string.Equals(paramName, ParamSelfViewHead, StringComparison.Ordinal)
+                    || string.Equals(paramName, ParamSelfViewDist, StringComparison.Ordinal)
+                    || string.Equals(paramName, ParamSelfViewHeight, StringComparison.Ordinal)
+                    || string.Equals(paramName, ParamSelfViewScale, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                VRCExpressionsMenu.Control ctrl = GetControl(item);
+                if (ctrl != null && ctrl.type == VRCExpressionsMenu.Control.ControlType.SubMenu && IsSelfViewSubMenu(item, ctrl))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public static GameObject EnsureSelfViewSubMenu(GameObject menuRoot, GameObject searchScope, bool recordUndo)
+        {
+            if (menuRoot == null || HasSelfViewMenuInHierarchy(searchScope ?? menuRoot, includeInactive: true))
+            {
+                return null;
+            }
+
+            var rootItem = menuRoot.GetComponent<ModularAvatarMenuItem>();
+            if (rootItem == null
+                || GetControlType(rootItem) != VRCExpressionsMenu.Control.ControlType.SubMenu
+                || rootItem.MenuSource != SubmenuSource.Children)
+            {
+                return null;
+            }
+
+            GameObject selfViewGo = CreateSelfViewSubMenu(menuRoot.transform, recordUndo);
+            EditorUtility.SetDirty(menuRoot);
+            return selfViewGo;
         }
 
         public static bool HasUniTextMenuInHierarchy(GameObject searchRoot, bool includeInactive = true)
@@ -472,6 +629,7 @@ namespace UniText.Editor
             bool updateMenuName,
             bool updateTargetMenu,
             bool syncWorldDrop,
+            bool syncBillboard,
             bool allowRuntimeResize,
             bool recordUndo)
         {
@@ -531,7 +689,8 @@ namespace UniText.Editor
                 }
             }
 
-            SyncWorldDropAndResizeItems(menuRoot, syncWorldDrop, allowRuntimeResize, recordUndo, allowAddResizeItems: true);
+            SyncWorldDropAndResizeItems(menuRoot, syncWorldDrop, syncBillboard, allowRuntimeResize, recordUndo, allowAddResizeItems: true);
+            EnsureSelfViewSubMenu(menuRoot, menuRoot, recordUndo);
             ApplyDefaultIconsIfMissing(menuRoot, recordUndo);
         }
 
@@ -541,6 +700,9 @@ namespace UniText.Editor
             {
                 return;
             }
+
+            Texture2D showBoardIcon = LoadMenuIcon("ShowBoard", IconGuidShowBoard);
+            Texture2D billboardIcon = LoadMenuIcon("Billboard", IconGuidBillboard);
 
             var rootItem = menuRoot.GetComponent<ModularAvatarMenuItem>();
             if (rootItem != null)
@@ -552,7 +714,8 @@ namespace UniText.Editor
                     bool shouldAssignRootIcon = rootIcon != null
                         && (rootCtrl.icon == null
                             || (rootCtrl.icon != rootIcon
-                                && rootCtrl.icon == LoadMenuIcon("ShowBoard", IconGuidShowBoard)));
+                                && showBoardIcon != null
+                                && rootCtrl.icon == showBoardIcon));
                     if (shouldAssignRootIcon)
                     {
                         if (recordUndo)
@@ -575,25 +738,47 @@ namespace UniText.Editor
                 }
 
                 VRCExpressionsMenu.Control ctrl = GetControl(item);
-                if (ctrl == null || ctrl.icon != null)
+                if (ctrl == null)
                 {
                     continue;
                 }
 
                 Texture2D defaultIcon = null;
+                bool upgradeLegacyPlaceholder = false;
                 if (ctrl.type == VRCExpressionsMenu.Control.ControlType.SubMenu)
                 {
                     if (IsAppearanceSubMenu(item, ctrl))
                     {
                         defaultIcon = GetDefaultAppearanceMenuIcon();
                     }
+                    else if (IsSelfViewSubMenu(item, ctrl))
+                    {
+                        defaultIcon = GetDefaultSelfViewMenuIcon();
+                        upgradeLegacyPlaceholder = billboardIcon != null && ctrl.icon == billboardIcon;
+                    }
                 }
                 else
                 {
-                    defaultIcon = GetDefaultIconForParameter(GetControlledParameterName(item));
+                    string paramName = GetControlledParameterName(item);
+                    defaultIcon = GetDefaultIconForParameter(paramName);
+                    if (string.Equals(paramName, ParamSelfView, StringComparison.Ordinal))
+                    {
+                        upgradeLegacyPlaceholder = showBoardIcon != null && ctrl.icon == showBoardIcon;
+                    }
+                    else if (string.Equals(paramName, ParamSelfViewHead, StringComparison.Ordinal))
+                    {
+                        upgradeLegacyPlaceholder = billboardIcon != null && ctrl.icon == billboardIcon;
+                    }
                 }
 
                 if (defaultIcon == null)
+                {
+                    continue;
+                }
+
+                bool shouldAssignIcon = ctrl.icon == null
+                    || (ctrl.icon != defaultIcon && upgradeLegacyPlaceholder);
+                if (!shouldAssignIcon)
                 {
                     continue;
                 }
@@ -630,6 +815,26 @@ namespace UniText.Editor
             return false;
         }
 
+        private static bool IsSelfViewSubMenu(ModularAvatarMenuItem subMenuItem, VRCExpressionsMenu.Control ctrl)
+        {
+            if (string.Equals(subMenuItem.gameObject.name, SelfViewMenuName, StringComparison.Ordinal)
+                || string.Equals(ctrl.name, SelfViewMenuName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            foreach (var child in subMenuItem.GetComponentsInChildren<ModularAvatarMenuItem>(true))
+            {
+                string childParam = GetControlledParameterName(child);
+                if (string.Equals(childParam, ParamSelfView, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         public static GameObject ApplyMenuSettings(
             UniTextProp prop,
             GameObject avatarRoot,
@@ -637,6 +842,7 @@ namespace UniText.Editor
             string menuName,
             VRCExpressionsMenu installTargetMenu,
             bool syncWorldDrop,
+            bool syncBillboard,
             bool allowRuntimeResize,
             bool recordUndo)
         {
@@ -673,6 +879,7 @@ namespace UniText.Editor
                     updateMenuName: true,
                     updateTargetMenu: isUnderProp || HasMenuInstaller(menuRoot),
                     syncWorldDrop: syncWorldDrop,
+                    syncBillboard: syncBillboard,
                     allowRuntimeResize: allowRuntimeResize,
                     recordUndo: recordUndo
                 );
@@ -681,7 +888,7 @@ namespace UniText.Editor
 
             if (avatarRoot != null && HasUniTextMenuInHierarchy(avatarRoot, true))
             {
-                SyncLooseMenuItems(avatarRoot, syncWorldDrop, allowRuntimeResize, recordUndo);
+                SyncLooseMenuItems(avatarRoot, syncWorldDrop, syncBillboard, allowRuntimeResize, recordUndo);
                 return null;
             }
 
@@ -690,6 +897,7 @@ namespace UniText.Editor
                 menuName,
                 installTargetMenu,
                 syncWorldDrop,
+                syncBillboard,
                 allowRuntimeResize,
                 recordUndo
             );
@@ -698,6 +906,7 @@ namespace UniText.Editor
         public static void SyncLooseMenuItems(
             GameObject avatarRoot,
             bool syncWorldDrop,
+            bool syncBillboard,
             bool allowRuntimeResize,
             bool recordUndo)
         {
@@ -706,7 +915,7 @@ namespace UniText.Editor
                 return;
             }
 
-            SyncWorldDropAndResizeItems(avatarRoot, syncWorldDrop, allowRuntimeResize, recordUndo, allowAddResizeItems: false);
+            SyncWorldDropAndResizeItems(avatarRoot, syncWorldDrop, syncBillboard, allowRuntimeResize, recordUndo, allowAddResizeItems: false);
         }
 
         public static void RemoveMenuRootUnderProp(GameObject propRoot, bool recordUndo)
@@ -757,6 +966,7 @@ namespace UniText.Editor
                 prop.menuName,
                 targetMenu,
                 prop.syncWorldDrop,
+                prop.syncBillboard,
                 prop.allowRuntimeResize,
                 recordUndo
             );
@@ -834,7 +1044,7 @@ namespace UniText.Editor
             }
         }
 
-        public static void AlignBuildMenuItemSyncFlags(GameObject searchRoot, bool syncWorldDrop)
+        public static void AlignBuildMenuItemSyncFlags(GameObject searchRoot, bool syncWorldDrop, bool syncBillboard)
         {
             if (searchRoot == null)
             {
@@ -855,7 +1065,8 @@ namespace UniText.Editor
                 }
 
                 bool expectedSynced = string.Equals(paramName, ParamVisible, StringComparison.Ordinal)
-                    || (string.Equals(paramName, ParamWorldDrop, StringComparison.Ordinal) && syncWorldDrop);
+                    || (string.Equals(paramName, ParamWorldDrop, StringComparison.Ordinal) && syncWorldDrop)
+                    || (string.Equals(paramName, ParamBillboard, StringComparison.Ordinal) && syncBillboard);
 
                 if (GetBoolMemberOrDefault(item, "isSynced", expectedSynced) != expectedSynced)
                 {
@@ -867,6 +1078,7 @@ namespace UniText.Editor
         private static void SyncWorldDropAndResizeItems(
             GameObject searchRoot,
             bool syncWorldDrop,
+            bool syncBillboard,
             bool allowRuntimeResize,
             bool recordUndo,
             bool allowAddResizeItems)
@@ -891,6 +1103,20 @@ namespace UniText.Editor
                             Undo.RecordObject(item, "Sync UniText WorldDrop Menu");
                         }
                         SetBoolMemberIfExists(item, "isSynced", syncWorldDrop);
+                        EditorUtility.SetDirty(item);
+                    }
+                    continue;
+                }
+
+                if (string.Equals(paramName, ParamBillboard, StringComparison.Ordinal))
+                {
+                    if (GetBoolMemberOrDefault(item, "isSynced", true) != syncBillboard)
+                    {
+                        if (recordUndo)
+                        {
+                            Undo.RecordObject(item, "Sync UniText Billboard Menu");
+                        }
+                        SetBoolMemberIfExists(item, "isSynced", syncBillboard);
                         EditorUtility.SetDirty(item);
                     }
                     continue;

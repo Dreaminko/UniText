@@ -190,6 +190,75 @@ namespace UniText.Editor
             return new Vector3(signedX, deltaY, 0.16f * heightScale);
         }
 
+        internal struct SelfViewMetrics
+        {
+            public Transform HeadBone;
+            public Transform BodyBone;
+            public Vector3 AnchorWorldPos;
+            public Quaternion AnchorWorldRot;
+            public float DistMin;
+            public float DistMax;
+            public float HeightMin;
+            public float HeightMax;
+        }
+
+        internal static SelfViewMetrics ComputeSelfViewMetrics(GameObject avatarRoot)
+        {
+            if (avatarRoot == null)
+            {
+                return new SelfViewMetrics
+                {
+                    AnchorWorldPos = new Vector3(0f, StandardEyeHeight - 0.08f, 0f),
+                    AnchorWorldRot = Quaternion.identity,
+                    DistMin = 0.46f,
+                    DistMax = 1.16f,
+                    HeightMin = -0.34f,
+                    HeightMax = 0.26f
+                };
+            }
+
+            Quaternion rootRot = avatarRoot.transform.rotation;
+            Quaternion invRot = Quaternion.Inverse(rootRot);
+            Vector3 rootPos = avatarRoot.transform.position;
+            Vector3 ToAvatarMeters(Vector3 worldPos) => invRot * (worldPos - rootPos);
+
+            var animator = avatarRoot.GetComponent<Animator>();
+            Transform headBone = (animator != null && animator.isHuman)
+                ? animator.GetBoneTransform(HumanBodyBones.Head)
+                : null;
+            Transform bodyBone = UniTextNdmfPlugin.ResolveHumanoidBone(avatarRoot, HumanBodyBones.Chest);
+
+            var descriptor = avatarRoot.GetComponent<VRCAvatarDescriptor>();
+            float rootScaleY = Mathf.Abs(avatarRoot.transform.lossyScale.y);
+            float rootScaleZ = Mathf.Abs(avatarRoot.transform.lossyScale.z);
+            float eyeY = (descriptor != null && descriptor.ViewPosition.y > 0.1f)
+                ? descriptor.ViewPosition.y * (rootScaleY > 1e-4f ? rootScaleY : 1f)
+                : (headBone != null ? ToAvatarMeters(headBone.position).y + 0.08f : StandardEyeHeight);
+
+            float heightScale = Mathf.Clamp(eyeY / StandardEyeHeight, 0.45f, 1.65f);
+            Vector3 anchorWorldPos = headBone != null
+                ? headBone.position
+                : rootPos + rootRot * new Vector3(0f, eyeY - 0.08f * heightScale, 0f);
+            Vector3 baseLocal = ToAvatarMeters(anchorWorldPos);
+
+            float eyeDeltaY = Mathf.Clamp(eyeY - baseLocal.y, 0f, 0.25f * heightScale);
+            float eyeDeltaZ = (descriptor != null && descriptor.ViewPosition.y > 0.1f)
+                ? Mathf.Clamp(descriptor.ViewPosition.z * (rootScaleZ > 1e-4f ? rootScaleZ : 1f) - baseLocal.z, -0.15f, 0.25f)
+                : 0.06f * heightScale;
+
+            return new SelfViewMetrics
+            {
+                HeadBone = headBone,
+                BodyBone = bodyBone,
+                AnchorWorldPos = anchorWorldPos,
+                AnchorWorldRot = rootRot,
+                DistMin = eyeDeltaZ + 0.40f * heightScale,
+                DistMax = eyeDeltaZ + 1.10f * heightScale,
+                HeightMin = eyeDeltaY - 0.42f * heightScale,
+                HeightMax = eyeDeltaY + 0.18f * heightScale
+            };
+        }
+
         public static void ApplyTransformPreview(GameObject avatarRoot, UniTextProp prop, bool recordUndo)
         {
             if (prop == null)

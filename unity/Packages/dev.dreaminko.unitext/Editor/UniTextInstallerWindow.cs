@@ -29,6 +29,11 @@ namespace UniText.Editor
         private const string StandardPrefabGuid = "e7a100054d9c40008000000000000003";
         private const string TurboPrefabGuid = "e7a100054d9c40008000000000000004";
 
+        private const string BannerAssetPath = UniTextAssetBuilder.PackageRoot + "/Assets/Banner.png";
+        private const string BannerAssetGuid = "e7a100094d9c40008000000000000001";
+        private const float BannerMaxHeight = 64f;
+        private const float BannerHorizontalPadding = 32f;
+
         [SerializeField] private GameObject _rawTargetObject;
         [SerializeField] private UniTextTier _tier = UniTextTier.Standard;
         [SerializeField] private UniTextPlacementPreset _placementPreset = UniTextPlacementPreset.RightSide;
@@ -38,6 +43,7 @@ namespace UniText.Editor
         [SerializeField] private bool _autoPositionToBone = true;
         [SerializeField] private Vector3 _boneOffset = new Vector3(0.28f, 0.14f, 0.16f);
         [SerializeField] private bool _syncWorldDrop = true;
+        [SerializeField] private bool _syncBillboard = true;
         [SerializeField] private bool _syncWideRows = true;
         [SerializeField] private bool _installMenu = true;
         [SerializeField] private string _menuName = "UniText";
@@ -49,6 +55,7 @@ namespace UniText.Editor
         [SerializeField] private bool _autoFitRowPx = true;
         [SerializeField] private int _rowPx = UniTextProp.DefaultRowPx;
         [SerializeField] private bool _allowRuntimeResize = true;
+        [SerializeField] private bool _autoFlipText = true;
         [SerializeField] private bool _showAdvanced;
 
         private bool _isChinese;
@@ -56,6 +63,8 @@ namespace UniText.Editor
         private Vector2 _scrollPos;
         private string _statusMessage;
         private MessageType _statusMessageType = MessageType.None;
+        private Texture2D _bannerTexture;
+        private bool _bannerLoadAttempted;
 
         private GUIStyle _titleStyle;
         private GUIStyle _subtitleStyle;
@@ -91,6 +100,8 @@ namespace UniText.Editor
 
         private void OnEnable()
         {
+            _bannerLoadAttempted = false;
+
             if (EditorPrefs.HasKey(LanguagePrefKey))
             {
                 _isChinese = EditorPrefs.GetInt(LanguagePrefKey, 0) == 1;
@@ -314,6 +325,7 @@ namespace UniText.Editor
             _autoPositionToBone = prop.autoPositionToBone;
             _boneOffset = prop.boneOffset;
             _syncWorldDrop = prop.syncWorldDrop;
+            _syncBillboard = prop.syncBillboard;
             _syncWideRows = prop.syncWideRows;
 
             VRCAvatarDescriptor avatar = prop.GetComponentInParent<VRCAvatarDescriptor>();
@@ -339,6 +351,7 @@ namespace UniText.Editor
             _autoFitRowPx = prop.autoFitRowPx;
             _rowPx = prop.rowPx;
             _allowRuntimeResize = prop.allowRuntimeResize;
+            _autoFlipText = prop.autoFlipText;
         }
 
         private void OnGUI()
@@ -365,6 +378,7 @@ namespace UniText.Editor
                 budgetSummary,
                 _tier,
                 _syncWorldDrop,
+                _syncBillboard,
                 out int addedBits,
                 out int projectedTotal,
                 _syncWideRows,
@@ -402,6 +416,7 @@ namespace UniText.Editor
         private void DrawHeader()
         {
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            DrawHeaderBanner();
             EditorGUILayout.BeginHorizontal();
             GUILayout.Label(
                 L("UniText Avatar 安装向导", "UniText Avatar Installer"),
@@ -418,6 +433,83 @@ namespace UniText.Editor
             }
             EditorGUILayout.EndHorizontal();
             EditorGUILayout.EndVertical();
+        }
+
+        private Texture2D LoadBannerTexture()
+        {
+            if (_bannerTexture != null)
+            {
+                return _bannerTexture;
+            }
+
+            if (_bannerLoadAttempted)
+            {
+                return null;
+            }
+
+            _bannerLoadAttempted = true;
+            _bannerTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(BannerAssetPath);
+            if (_bannerTexture == null)
+            {
+                string guidPath = AssetDatabase.GUIDToAssetPath(BannerAssetGuid);
+                if (!string.IsNullOrEmpty(guidPath))
+                {
+                    _bannerTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(guidPath);
+                }
+            }
+
+            return _bannerTexture;
+        }
+
+        private void DrawHeaderBanner()
+        {
+            Texture2D banner = LoadBannerTexture();
+            if (banner == null || banner.width <= 0 || banner.height <= 0)
+            {
+                return;
+            }
+
+            float aspect = (float)banner.width / banner.height;
+            float maxWidth = Mathf.Max(60f, position.width - BannerHorizontalPadding);
+            float targetHeight = BannerMaxHeight;
+            float targetWidth = targetHeight * aspect;
+            if (targetWidth > maxWidth)
+            {
+                targetWidth = maxWidth;
+                targetHeight = targetWidth / aspect;
+            }
+
+            EditorGUILayout.Space(4f);
+            Rect containerRect = GUILayoutUtility.GetRect(
+                GUIContent.none,
+                GUIStyle.none,
+                GUILayout.ExpandWidth(true),
+                GUILayout.Height(targetHeight)
+            );
+            Rect drawRect = new Rect(
+                containerRect.x + (containerRect.width - targetWidth) * 0.5f,
+                containerRect.y + (containerRect.height - targetHeight) * 0.5f,
+                targetWidth,
+                targetHeight
+            );
+
+            Color prevColor = GUI.color;
+            if (!EditorGUIUtility.isProSkin)
+            {
+                GUI.color = new Color(0.18f, 0.18f, 0.18f, 1f);
+            }
+            GUI.DrawTexture(drawRect, banner, ScaleMode.ScaleToFit, true);
+            GUI.color = prevColor;
+
+            EditorGUILayout.Space(6f);
+            Rect sepRect = GUILayoutUtility.GetRect(1f, 1f, GUILayout.ExpandWidth(true));
+            EditorGUI.DrawRect(
+                sepRect,
+                EditorGUIUtility.isProSkin
+                    ? new Color(1f, 1f, 1f, 0.08f)
+                    : new Color(0f, 0f, 0f, 0.10f)
+            );
+            EditorGUILayout.Space(4f);
         }
 
         private VRCAvatarDescriptor DrawTargetAvatarSection()
@@ -772,7 +864,7 @@ namespace UniText.Editor
                         {
                             continue;
                         }
-                        UniTextParameterChecker.ProjectWithUniText(budgetSummary, candidate, _syncWorldDrop, out _, out int candidateTotal, _syncWideRows, _displayRows > 6, _allowRuntimeResize);
+                        UniTextParameterChecker.ProjectWithUniText(budgetSummary, candidate, _syncWorldDrop, _syncBillboard, out _, out int candidateTotal, _syncWideRows, _displayRows > 6, _allowRuntimeResize);
                         if (candidateTotal <= maxBits)
                         {
                             suggestedTier = candidate;
@@ -780,7 +872,7 @@ namespace UniText.Editor
                         }
                     }
 
-                    UniTextParameterChecker.ProjectWithUniText(budgetSummary, UniTextTier.Lite, false, out _, out int liteLocalWd, false, false, false);
+                    UniTextParameterChecker.ProjectWithUniText(budgetSummary, UniTextTier.Lite, false, false, out _, out int liteLocalWd, false, false, false);
 
                     string suggestion;
                     if (suggestedTier.HasValue)
@@ -794,8 +886,8 @@ namespace UniText.Editor
                     else if (liteLocalWd <= maxBits)
                     {
                         suggestion = L(
-                            "建议切换到 Lite (33b) 档位，并关闭“游戏内实时调宽高 (+1b)”、“同步世界固定 (+1b)”或“宽行模式 (+1b)”。",
-                            "Suggestion: switch to Lite (33b) tier and disable 'Allow In-Game Live Resize (+1b)', 'Sync World Drop (+1b)', or 'Wide Rows (+1b)'."
+                            "建议切换到 Lite (33b) 档位，并关闭“游戏内实时调宽高 (+1b)”、“同步世界固定 (+1b)”、“同步面向观察者 (+1b)”或“宽行模式 (+1b)”。",
+                            "Suggestion: switch to Lite (33b) tier and disable 'Allow In-Game Live Resize (+1b)', 'Sync World Drop (+1b)', 'Sync Billboard (+1b)', or 'Wide Rows (+1b)'."
                         );
                     }
                     else
@@ -897,6 +989,14 @@ namespace UniText.Editor
                 _syncWorldDrop
             );
 
+            _syncBillboard = EditorGUILayout.ToggleLeft(
+                new GUIContent(
+                    L("同步面向观察者 (Billboard, +1b)", "Sync Billboard (+1b)"),
+                    L("开启后，打开 Billboard 时每位玩家都能看到字幕板朝向自己的视角。", "Remote viewers also see the subtitle board face their own camera when Billboard is enabled.")
+                ),
+                _syncBillboard
+            );
+
             _syncWideRows = EditorGUILayout.ToggleLeft(
                 new GUIContent(
                     L("宽行模式（比例字体 64 格/行，+1b）", "Wide Rows (64 proportional cells/row, +1b)"),
@@ -904,6 +1004,15 @@ namespace UniText.Editor
                       "Syncs the UniText_Bank column-bank bit so each row holds up to 64 proportional cells (about 2x more English per row). When off, rows keep 32 cells but still render proportionally.")
                 ),
                 _syncWideRows
+            );
+
+            _autoFlipText = EditorGUILayout.ToggleLeft(
+                new GUIContent(
+                    L("镜子与背面自动正向显示（0b）", "Auto-Flip Text in Mirrors & Backface (0b)"),
+                    L("开启后，在镜子内或从面板背面观看时自动水平翻转文字，玩家看到的始终为正向内容（不占用同步参数与菜单槽位）。",
+                      "Automatically flips text horizontally in mirrors and when viewed from behind the panel so viewers always read forward-facing text (0 synced bits, no menu slot).")
+                ),
+                _autoFlipText
             );
 
             _installMenu = EditorGUILayout.ToggleLeft(
@@ -1444,6 +1553,7 @@ namespace UniText.Editor
                 || prop.autoPositionToBone != _autoPositionToBone
                 || Vector3.SqrMagnitude(prop.boneOffset - _boneOffset) > 1e-6f
                 || prop.syncWorldDrop != _syncWorldDrop
+                || prop.syncBillboard != _syncBillboard
                 || prop.syncWideRows != _syncWideRows
                 || menuChanged
                 || prop.stripOnAndroid != _stripOnAndroid
@@ -1452,7 +1562,8 @@ namespace UniText.Editor
                 || prop.EffectiveDisplayRows != _displayRows
                 || prop.autoFitRowPx != _autoFitRowPx
                 || (!_autoFitRowPx && propRowPx != clampedRowPx)
-                || prop.allowRuntimeResize != _allowRuntimeResize;
+                || prop.allowRuntimeResize != _allowRuntimeResize
+                || prop.autoFlipText != _autoFlipText;
         }
 
         private static string GetTierShortName(UniTextTier tier)
@@ -1531,6 +1642,7 @@ namespace UniText.Editor
                         sanitizedMenuName,
                         _installTargetMenu,
                         _syncWorldDrop,
+                        _syncBillboard,
                         _allowRuntimeResize,
                         recordUndo: true
                     );
@@ -1583,6 +1695,7 @@ namespace UniText.Editor
                             sanitizedMenuName,
                             _installTargetMenu,
                             _syncWorldDrop,
+                            _syncBillboard,
                             _allowRuntimeResize,
                             recordUndo: true
                         );
@@ -1744,6 +1857,7 @@ namespace UniText.Editor
             SetBoolProp(so, "autoPositionToBone", _autoPositionToBone);
             SetVector3Prop(so, "boneOffset", _boneOffset);
             SetBoolProp(so, "syncWorldDrop", _syncWorldDrop);
+            SetBoolProp(so, "syncBillboard", _syncBillboard);
             SetBoolProp(so, "syncWideRows", _syncWideRows);
             SetBoolProp(so, "installMenu", _installMenu);
             string sanitizedMenuName = string.IsNullOrWhiteSpace(_menuName) ? "UniText" : _menuName.Trim();
@@ -1756,6 +1870,7 @@ namespace UniText.Editor
             SetBoolProp(so, "autoFitRowPx", _autoFitRowPx);
             SetIntProp(so, "rowPx", Mathf.Clamp(Mathf.RoundToInt(_rowPx / 8f) * 8, UniTextProp.MinRowPx, UniTextProp.MaxRowPx));
             SetBoolProp(so, "allowRuntimeResize", _allowRuntimeResize);
+            SetBoolProp(so, "autoFlipText", _autoFlipText);
 
             so.ApplyModifiedProperties();
             EditorUtility.SetDirty(prop);

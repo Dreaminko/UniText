@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Assets/Banner.png" alt="UniText" width="480" />
+<img src="unity/Packages/dev.dreaminko.unitext/Assets/Banner.png" alt="UniText" width="480" />
 
 **English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
 
@@ -53,7 +53,7 @@ UniText prefabs never modify your base Avatar Animator Controller, Expression Pa
 
 - **Automatic Bone Attachment (`MA Bone Proxy`)**: Attaches `SideFollowAnchor` to the configured humanoid bone (defaults to `Chest`, with optional auto-offset alignment) and binds `BoardPivot` via `VRCParentConstraint` for seamless Side Follow / World Drop.
 - **Direct BlendTree FX Merge (`MA Merge Animator`)**: Generates the tier's Direct BlendTree FX layer in memory and merges it using `MergeAnimatorPathMode.Relative` and `matchAvatarWriteDefaults = true`.
-- **Automatic Parameters (`MA Parameters`)**: Registers `UniText_Visible`, `UniText_Ctrl`, `UniText_D0..D{N-1}`, optional synced `UniText_WorldDrop`, `UniText_Bank` (Wide Rows), and `UniText_RowPage` (`> 6` rows), plus local-only UI controls (`Width`, `Height`, `Scale`, `Opacity`) and viewport geometry markers (`UniText_Rows`, `UniText_RowPx8`).
+- **Automatic Parameters (`MA Parameters`)**: Registers `UniText_Visible`, `UniText_Ctrl`, `UniText_D0..D{N-1}`, optional synced `UniText_WorldDrop`, `UniText_Billboard`, `UniText_Bank` (Wide Rows), and `UniText_RowPage` (`> 6` rows), plus local-only UI controls (`Width`, `Height`, `Scale`, `Opacity`) and viewport geometry markers (`UniText_Rows`, `UniText_RowPx8`).
 - **Editable Hierarchy Submenu (`MA Menu Installer` + `MA Menu Item`)**: Generates an editable `"UniText"` submenu hierarchy under your prop (`MA Menu Installer` + `MA Menu Item` nodes) so you can rename entries, assign icons, reorder items, tweak defaults, or reparent controls into other avatar menus directly in the Hierarchy, with automatic build-time fallback if left ungenerated.
 - **Automatic Quest/Android Stripping**: When `stripOnAndroid` is enabled (default), UniText automatically removes itself on Android builds without touching your PC prefab setup.
 
@@ -85,10 +85,11 @@ Inside VRChat's Expressions Menu under **`UniText`**, you get:
 ### Optional Synced Bits & VRAM Breakdown
 
 - **Optional World Drop Sync (`+1 bit`)**: Syncing `UniText_WorldDrop` uses `+1 bit` (on by default so remote players see the board stay dropped in world space; can be switched to local-only in `UniTextProp` or `ModularAvatarParameters` if desired).
+- **Optional Billboard Sync (`+1 bit`)**: Syncing `UniText_Billboard` uses `+1 bit` (on by default so every remote viewer sees the board face their own camera when Billboard is toggled on; can be switched to local-only in `UniTextProp` or `ModularAvatarParameters` if desired).
 - **Optional Wide Rows (`+1 bit`)**: Syncing `UniText_Bank` (`syncWideRows`, on by default) uses `+1 bit` so each row holds up to `64` proportional cells (`~2×` more English per row). Disabling it keeps `32` cells per row while preserving proportional rendering.
 - **Optional Extended Rows (`+1 bit` when `> 6` rows or live resize enabled)**: Unlocks `7..12` rows via `UniText_RowPage` (`+1 bit`).
 - **Optional Live Resize & Reflow (`+1 bit`, on by default)**: `UniText_Width` and `UniText_Height` stay local-only (`0` synced bits); [VRCS](https://github.com/Dreaminko/VRCS) broadcasts the reflowed `(rows, row_px)` to local and remote players via `CMD_SET_GEOMETRY`, so enabling `Allow In-Game Resize` only costs `+1 bit` for `UniText_RowPage` (disable to save `1` bit).
-- **Local-only UI Controls & Capability Markers (`0` synced bits)**: `UniText_ProtoVer`, `UniText_Rows`, `UniText_RowPx8`, `UniText_Width`, `UniText_Height`, `UniText_Billboard`, `UniText_Scale`, `UniText_Opacity`, `UniText_LocalClear`.
+- **Local-only UI Controls & Capability Markers (`0` synced bits)**: `UniText_ProtoVer`, `UniText_Rows`, `UniText_RowPx8`, `UniText_Width`, `UniText_Height`, `UniText_Scale`, `UniText_Opacity`, `UniText_LocalClear`.
 - **VRAM Footprint**: Packed block-indexed atlas (`FontAtlas_BMP_Packed.png`, `680 KB`) + unified aux table (`UniTextAux_64x64.png`, `16 KB`) + CRT/ParamBridge (`16 KB`) ≈ **`712 KB`** total.
 - **Parameter Budget Tip**: Check your avatar's remaining parameter budget in Unity via **`Tools → UniText → Check Avatar Parameter Budget`**. If your avatar's own clothing/slider toggles take too many bits, use **VRCFury Parameter Compressor** on your avatar's static menu parameters (while keeping UniText's OSC data parameters uncompressed).
 

@@ -46,6 +46,7 @@ Material:
     - _RowPx: 384
     - _LiveGeometry: 1
     - _KeepGlyphAspect: 1
+    - _AutoFlip: 2
     m_Colors:
     - _AnchorOffset: {r: 0.5, g: -0.5, b: 0, a: 0}
     - _BgColor: {r: 0.05, g: 0.065, b: 0.1, a: 0.86}

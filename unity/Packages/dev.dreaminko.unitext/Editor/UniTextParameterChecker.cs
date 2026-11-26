@@ -94,6 +94,7 @@ namespace UniText.Editor
 
                 if (seenNames.Add("UniText_Visible")) usedBits += 1;
                 if (prop.syncWorldDrop && seenNames.Add("UniText_WorldDrop")) usedBits += 1;
+                if (prop.syncBillboard && seenNames.Add("UniText_Billboard")) usedBits += 1;
                 if (prop.syncWideRows && seenNames.Add("UniText_Bank")) usedBits += 1;
                 if (prop.NeedsRowPage && seenNames.Add("UniText_RowPage")) usedBits += 1;
                 if (seenNames.Add("UniText_Ctrl")) usedBits += 8;
@@ -131,6 +132,7 @@ namespace UniText.Editor
             AvatarBudgetSummary summary,
             UniTextTier tier,
             bool syncWorldDrop,
+            bool syncBillboard,
             out int addedBits,
             out int projectedTotalBits,
             bool syncWideRows = true,
@@ -146,6 +148,7 @@ namespace UniText.Editor
 
             if (seenNames.Add("UniText_Visible")) delta += 1;
             if (syncWorldDrop && seenNames.Add("UniText_WorldDrop")) delta += 1;
+            if (syncBillboard && seenNames.Add("UniText_Billboard")) delta += 1;
             if (syncWideRows && seenNames.Add("UniText_Bank")) delta += 1;
             if ((syncExtendedRows || allowRuntimeResize) && seenNames.Add("UniText_RowPage")) delta += 1;
             if (seenNames.Add("UniText_Ctrl")) delta += 8;
@@ -192,12 +195,12 @@ namespace UniText.Editor
                 attachedInfo +
                 $"Currently Used Synced Bits (incl. attached MA/UniText): {usedBits} / {MaxSyncedBits}\n" +
                 $"Remaining Synced Bits: {remaining}\n\n" +
-                $"UniText Tier Compatibility (+1b WorldDrop / +1b Wide Rows / +1b RowPage for >6 rows or Live Resize; Resize W/H itself is local-only):\n" +
-                $"  • Lite     (33b / 35b): {(remaining >= 35 ? "FITS (with WorldDrop + Wide Rows)" : remaining >= 33 ? "FITS (WorldDrop local / narrow rows)" : "NOT ENOUGH BITS")}\n" +
-                $"  • Compact  (45b / 47b): {(remaining >= 47 ? "FITS (with WorldDrop + Wide Rows)" : remaining >= 45 ? "FITS (WorldDrop local / narrow rows)" : "NOT ENOUGH BITS")}\n" +
-                $"  • Balanced (57b / 59b): {(remaining >= 59 ? "FITS (with WorldDrop + Wide Rows)" : remaining >= 57 ? "FITS (WorldDrop local / narrow rows)" : "NOT ENOUGH BITS")}\n" +
-                $"  • Standard (73b / 75b): {(remaining >= 75 ? "FITS (with WorldDrop + Wide Rows)" : remaining >= 73 ? "FITS (WorldDrop local / narrow rows)" : "NOT ENOUGH BITS")}\n" +
-                $"  • Turbo   (137b / 139b): {(remaining >= 139 ? "FITS (with WorldDrop + Wide Rows)" : remaining >= 137 ? "FITS (WorldDrop local / narrow rows)" : "NOT ENOUGH BITS")}" +
+                $"UniText Tier Compatibility (+1b WorldDrop / +1b Billboard / +1b Wide Rows / +1b RowPage for >6 rows or Live Resize; Resize W/H itself is local-only):\n" +
+                $"  • Lite     (33b / 36b): {(remaining >= 36 ? "FITS (with WorldDrop + Billboard + Wide Rows)" : remaining >= 33 ? "FITS (local options / narrow rows)" : "NOT ENOUGH BITS")}\n" +
+                $"  • Compact  (45b / 48b): {(remaining >= 48 ? "FITS (with WorldDrop + Billboard + Wide Rows)" : remaining >= 45 ? "FITS (local options / narrow rows)" : "NOT ENOUGH BITS")}\n" +
+                $"  • Balanced (57b / 60b): {(remaining >= 60 ? "FITS (with WorldDrop + Billboard + Wide Rows)" : remaining >= 57 ? "FITS (local options / narrow rows)" : "NOT ENOUGH BITS")}\n" +
+                $"  • Standard (73b / 76b): {(remaining >= 76 ? "FITS (with WorldDrop + Billboard + Wide Rows)" : remaining >= 73 ? "FITS (local options / narrow rows)" : "NOT ENOUGH BITS")}\n" +
+                $"  • Turbo   (137b / 140b): {(remaining >= 140 ? "FITS (with WorldDrop + Billboard + Wide Rows)" : remaining >= 137 ? "FITS (local options / narrow rows)" : "NOT ENOUGH BITS")}" +
                 (remaining < 33 ? "\n\nTip: Use VRCFury Parameter Compressor / Modular Avatar compression on your avatar's static menu toggles/sliders to free bits." : "");
 
             Debug.Log("[UniText]\n" + report);

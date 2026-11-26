@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Assets/Banner.png" alt="UniText" width="480" />
+<img src="unity/Packages/dev.dreaminko.unitext/Assets/Banner.png" alt="UniText" width="480" />
 
 [English](README.md) · [简体中文](README.zh-CN.md) · **日本語**
 
@@ -53,7 +53,7 @@ UniText のプレハブは、アバターの Animator Controller、Expression Pa
 
 - **自動ボーン追従（`MA Bone Proxy`）**: `SideFollowAnchor` を指定された Humanoid ボーン（デフォルトは `Chest`、自動オフセット調整対応）に配置し、`BoardPivot` を `VRCParentConstraint` で接続してサイド追従と World Drop をシームレスに切り替えます。
 - **Direct BlendTree FX マージ（`MA Merge Animator`）**: 選択したティア用の Direct BlendTree FX レイヤーをメモリ上で生成し、`MergeAnimatorPathMode.Relative` および `matchAvatarWriteDefaults = true` でマージします。
-- **パラメータ自動登録（`MA Parameters`）**: `UniText_Visible`、`UniText_Ctrl`、`UniText_D0..D{N-1}`、オプションの同期パラメータ `UniText_WorldDrop`、`UniText_Bank`（ワイド行）、`UniText_RowPage`（`> 6` 行）、およびローカル専用 UI 操作（`Width`、`Height`、`Scale`、`Opacity`）とジオメトリマーカー（`UniText_Rows`、`UniText_RowPx8`）を登録します。
+- **パラメータ自動登録（`MA Parameters`）**: `UniText_Visible`、`UniText_Ctrl`、`UniText_D0..D{N-1}`、オプションの同期パラメータ `UniText_WorldDrop`、`UniText_Billboard`、`UniText_Bank`（ワイド行）、`UniText_RowPage`（`> 6` 行）、およびローカル専用 UI 操作（`Width`、`Height`、`Scale`、`Opacity`）とジオメトリマーカー（`UniText_Rows`、`UniText_RowPx8`）を登録します。
 - **編集可能な階層サブメニュー（`MA Menu Installer` + `MA Menu Item`）**: プレハブ配下に編集可能な `"UniText"` サブメニュー階層（`MA Menu Installer` + `MA Menu Item`）を生成し、Hierarchy 上で名称変更・アイコン設定・並び替え・デフォルト値調整や他メニューへの移動を直接行えます（未生成の場合はビルド時に自動フォールバック生成されます）。
 - **Quest / Android 自動ストリップ**: `stripOnAndroid` が有効（デフォルト）の場合、Android ビルド時に PC 側のプレハブ設定を変更せず UniText を自動的に除外します。
 
@@ -85,10 +85,11 @@ VRChat の Expressions Menu 内 **`UniText`** サブメニューから以下を�
 ### オプション同期ビットと VRAM 内訳
 
 - **World Drop 同期（`+1 bit`）**: `UniText_WorldDrop` の同期に `+1 bit` 使用します（デフォルト有効：他プレイヤーからもワールド固定された状態が見えます。不要な場合は `UniTextProp` または `ModularAvatarParameters` でローカル専用に変更可能）。
+- **Billboard 同期（`+1 bit`）**: `UniText_Billboard` の同期に `+1 bit` 使用します（デフォルト有効：Billboard をオンにすると、各リモートプレイヤー自身のカメラに向かって正対表示されます。不要な場合は `UniTextProp` または `ModularAvatarParameters` でローカル専用に変更可能）。
 - **ワイド行対応（`+1 bit`）**: `UniText_Bank`（`syncWideRows`、デフォルト有効）に `+1 bit` 使用し、1 行あたり最大 `64` セルの比例文字を保持できます（英語の収容文字数が約 2 倍になります）。無効時はプロポーショナル描画を維持したまま `32` セル/行になります。
 - **拡張行数対応（`> 6` 行またはライブサイズ変更有効時 `+1 bit`）**: `UniText_RowPage`（`+1 bit`）により `7..12` 行表示に対応します。
 - **ライブサイズ変更 & リフロー（`+1 bit`、デフォルト有効）**: `UniText_Width` と `UniText_Height` 自体はローカル専用（`0` 同期ビット）です。[VRCS](https://github.com/Dreaminko/VRCS) が再計算した `(rows, row_px)` を `CMD_SET_GEOMETRY` でローカル・リモート双方に送信するため、`Allow In-Game Resize` を有効にしても消費するのは `UniText_RowPage` の `+1 bit` のみです（無効化で `1` bit 節約可能）。
-- **ローカル専用 UI コントロール & 機能マーカー（`0` 同期ビット）**: `UniText_ProtoVer`、`UniText_Rows`、`UniText_RowPx8`、`UniText_Width`、`UniText_Height`、`UniText_Billboard`、`UniText_Scale`、`UniText_Opacity`、`UniText_LocalClear`。
+- **ローカル専用 UI コントロール & 機能マーカー（`0` 同期ビット）**: `UniText_ProtoVer`、`UniText_Rows`、`UniText_RowPx8`、`UniText_Width`、`UniText_Height`、`UniText_Scale`、`UniText_Opacity`、`UniText_LocalClear`。
 - **VRAM フットプリント**: ブロックインデックス圧縮アトラス（`FontAtlas_BMP_Packed.png`、`680 KB`）+ 統合補助テーブル（`UniTextAux_64x64.png`、`16 KB`）+ CRT / ParamBridge（`16 KB`）≈ 合計 **`712 KB`**。
 - **パラメータ残量の確認**: Unity の **`Tools → UniText → Check Avatar Parameter Budget`** からアバターの空きパラメータを確認できます。衣装やスライダー等でビット数が逼迫している場合は、アバター側の静的メニューパラメータに対してのみ **VRCFury Parameter Compressor** を併用してください（UniText のリアルタイム OSC データパラメータは圧縮しないでください）。
 

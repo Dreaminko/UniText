@@ -76,6 +76,9 @@ namespace UniText
         [Tooltip("Add persistent Width and Height Radial Puppets (0..1, default 0.5) under Appearance so in-game resizing reflows row count and line width for local and remote players. UniText_Width/Height stay local-only (0 synced bits): the sender (VRCS) broadcasts the resulting geometry via CMD_SET_GEOMETRY. Costs +1 bit (UniText_RowPage).")]
         public bool allowRuntimeResize = true;
 
+        [Tooltip("Automatically flip text horizontally in mirrors and from the back of the panel so viewers always read forward-facing text (0 synced bits).")]
+        public bool autoFlipText = true;
+
         [Header("Modular Avatar Attachment")]
         [Tooltip("Placement preset used for auto-fitting relative to the avatar.")]
         public UniTextPlacementPreset placementPreset = UniTextPlacementPreset.RightSide;
@@ -98,6 +101,9 @@ namespace UniText
         [Header("Parameters & Expressions Menu")]
         [Tooltip("Sync World Drop toggle across network (+1 synced bit) so remote players also see the board frozen in world space.")]
         public bool syncWorldDrop = true;
+
+        [Tooltip("Sync Billboard toggle across network (+1 synced bit) so remote viewers also see the board face their own camera.")]
+        public bool syncBillboard = true;
 
         [Tooltip("Wide Rows: sync the UniText_Bank column-bank bit (+1 synced bit) so each row holds up to 64 proportional cells (~2x more English per row). Disable to keep 32 cells per row.")]
         public bool syncWideRows = true;
@@ -219,7 +225,7 @@ namespace UniText
         }
 
         // Live resize no longer syncs UniText_Width/Height (local-only); remote viewers follow CMD_SET_GEOMETRY.
-        public int SyncedBitCost => GetBaseSyncedBits(tier) + (syncWorldDrop ? 1 : 0) + (syncWideRows ? 1 : 0) + (NeedsRowPage ? 1 : 0);
+        public int SyncedBitCost => GetBaseSyncedBits(tier) + (syncWorldDrop ? 1 : 0) + (syncBillboard ? 1 : 0) + (syncWideRows ? 1 : 0) + (NeedsRowPage ? 1 : 0);
 
         public static Vector2 GetAnchorNormalized(UniTextBoardAnchor anchor)
         {

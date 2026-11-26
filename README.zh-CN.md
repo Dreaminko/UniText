@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Assets/Banner.png" alt="UniText" width="480" />
+<img src="unity/Packages/dev.dreaminko.unitext/Assets/Banner.png" alt="UniText" width="480" />
 
 [English](README.md) · **简体中文** · [日本語](README.ja.md)
 
@@ -53,7 +53,7 @@ UniText 的 Prefab 绝不会直接改写你磁盘上的基础 Animator Controlle
 
 - **自动骨骼绑定（`MA Bone Proxy`）**：将 `SideFollowAnchor` 挂载到配置的人形骨骼（默认 `Chest`，支持自动对齐偏移），并通过 `VRCParentConstraint` 绑定 `BoardPivot`，实现平滑的侧身跟随与世界放置切换。
 - **Direct BlendTree FX 合并（`MA Merge Animator`）**：在内存中生成对应档位的 Direct BlendTree FX 图层，并以 `MergeAnimatorPathMode.Relative` 和 `matchAvatarWriteDefaults = true` 进行合并。
-- **自动参数注册（`MA Parameters`）**：注册 `UniText_Visible`、`UniText_Ctrl`、`UniText_D0..D{N-1}`，以及可选同步参数 `UniText_WorldDrop`、`UniText_Bank`（宽行）和 `UniText_RowPage`（`> 6` 行），同时附加仅限本地的 UI 控制参数（`Width`、`Height`、`Scale`、`Opacity`）与视口几何标记（`UniText_Rows`、`UniText_RowPx8`）。
+- **自动参数注册（`MA Parameters`）**：注册 `UniText_Visible`、`UniText_Ctrl`、`UniText_D0..D{N-1}`，以及可选同步参数 `UniText_WorldDrop`、`UniText_Billboard`、`UniText_Bank`（宽行）和 `UniText_RowPage`（`> 6` 行），同时附加仅限本地的 UI 控制参数（`Width`、`Height`、`Scale`、`Opacity`）与视口几何标记（`UniText_Rows`、`UniText_RowPx8`）。
 - **可编辑层级菜单（`MA Menu Installer` + `MA Menu Item`）**：在组件下直接生成可编辑的 `"UniText"` 子菜单层级（`MA Menu Installer` + `MA Menu Item`），方便直接在 Hierarchy 中改名、配置图标、调整顺序、设置默认值或拖拽移动到其他菜单；若未提前生成，构建时也会自动兜底生成。
 - **Quest / Android 自动剥离**：默认开启 `stripOnAndroid` 时，构建 Android 平台 Avatar 会自动移除 UniText 组件与节点，同时完全保留 PC 端配置。
 
@@ -85,10 +85,11 @@ UniText 的 Prefab 绝不会直接改写你磁盘上的基础 Animator Controlle
 ### 可选同步位与显存明细
 
 - **可选世界放置同步（`+1 bit`）**：同步 `UniText_WorldDrop` 占用 `+1 bit`（默认开启，使远端玩家也能看到字幕板固定在空间中；如不需要可在 `UniTextProp` 或 `ModularAvatarParameters` 中改为仅本地）。
+- **可选面向观察者同步（`+1 bit`）**：同步 `UniText_Billboard` 占用 `+1 bit`（默认开启，打开 Billboard 后每位远端玩家都会看到字幕板正对自己的视角；如不需要可在 `UniTextProp` 或 `ModularAvatarParameters` 中改为仅本地）。
 - **可选宽行模式（`+1 bit`）**：同步 `UniText_Bank`（`syncWideRows`，默认开启）占用 `+1 bit`，使单行最多可容纳 `64` 个比例字符单元（英文容量约翻倍）。关闭后保留每行 `32` 单元与比例排版。
 - **可选扩展行数（当 `> 6` 行或开启实时缩放时 `+1 bit`）**：通过 `UniText_RowPage`（`+1 bit`）解锁 `7..12` 行显示。
 - **可选实时宽高重排（`+1 bit`，默认开启）**：`UniText_Width` 和 `UniText_Height` 仅限本地（`0` 同步位）；[VRCS](https://github.com/Dreaminko/VRCS) 会通过 `CMD_SET_GEOMETRY` 向本地与远端玩家广播重排后的 `(rows, row_px)`，因此开启 `Allow In-Game Resize` 仅额外占用 `UniText_RowPage` 的 `+1 bit`（关闭可节省 `1` bit）。
-- **仅本地 UI 控制与能力标记（`0` 同步位）**：`UniText_ProtoVer`、`UniText_Rows`、`UniText_RowPx8`、`UniText_Width`、`UniText_Height`、`UniText_Billboard`、`UniText_Scale`、`UniText_Opacity`、`UniText_LocalClear`。
+- **仅本地 UI 控制与能力标记（`0` 同步位）**：`UniText_ProtoVer`、`UniText_Rows`、`UniText_RowPx8`、`UniText_Width`、`UniText_Height`、`UniText_Scale`、`UniText_Opacity`、`UniText_LocalClear`。
 - **显存占用**：块索引压缩字库图集（`FontAtlas_BMP_Packed.png`，`680 KB`）+ 统一辅助表（`UniTextAux_64x64.png`，`16 KB`）+ CRT / ParamBridge（`16 KB`）≈ **`712 KB`**。
 - **参数预算检查建议**：可在 Unity 中点击 **`Tools → UniText → Check Avatar Parameter Budget`** 查看 Avatar 剩余参数空间。若角色自身的换装或滑块参数占用过多位数，建议仅对角色自身的静态菜单参数使用 **VRCFury Parameter Compressor**（切勿压缩 UniText 的实时 OSC 数据参数）。
 

@@ -39,7 +39,7 @@ to any document created using the fonts or their derivatives.
 ### Google Material Symbols
 - **Source**: [google/material-design-icons](https://github.com/google/material-design-icons) ([Material Symbols](https://fonts.google.com/icons))
 - **License**: **Apache License 2.0 (`Apache-2.0`)**
-- **Usage**: Used to create the 128×128 RGBA Expressions Menu icons under `unity/Packages/dev.dreaminko.unitext/Icons/` (`UniText.png`, `Appearance.png`, `ShowBoard.png`, `WorldDrop.png`, `Billboard.png`, `ClearScreen.png`, `Scale.png`, `Opacity.png`, `Width.png`, `Height.png`).
+- **Usage**: Used to create the 128×128 RGBA Expressions Menu icons under `unity/Packages/dev.dreaminko.unitext/Icons/` (`UniText.png`, `Appearance.png`, `ShowBoard.png`, `WorldDrop.png`, `Billboard.png`, `ClearScreen.png`, `Scale.png`, `Opacity.png`, `Width.png`, `Height.png`, `SelfView.png`, `FollowHead.png`).
 - **Modification Notice**: The original Material Symbols vector glyphs have been rasterized, sized, and styled into 128×128 RGBA PNG textures with custom colors/backgrounds for VRChat Expressions Menu display.
 
 ```text

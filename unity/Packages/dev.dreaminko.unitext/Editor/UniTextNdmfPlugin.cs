@@ -214,11 +214,16 @@ namespace UniText.Editor
             int displayRows = prop.EffectiveDisplayRows;
             int rowPx = prop.EffectiveRowPx;
             UniTextPlacementUtility.ApplyTransformPreview(ctx.AvatarRootObject, prop, recordUndo: false);
+            MeshFilter baseDispMeshFilter = displayQuad.GetComponent<MeshFilter>();
+            Mesh baseQuadMesh = baseDispMeshFilter != null ? baseDispMeshFilter.sharedMesh : null;
 
             MeshRenderer dispRenderer = displayQuad.GetComponent<MeshRenderer>();
             if (dispRenderer != null && dispMat != null)
             {
                 float liveGeometry = prop.allowRuntimeResize ? 1f : 0f;
+                float currentAutoFlip = dispMat.HasProperty("_AutoFlip") ? dispMat.GetFloat("_AutoFlip") : 2f;
+                float desiredAutoFlip = prop.autoFlipText ? (currentAutoFlip > 0.5f ? currentAutoFlip : 2f) : 0f;
+                bool autoFlipMismatch = !dispMat.HasProperty("_AutoFlip") || !Mathf.Approximately(currentAutoFlip, desiredAutoFlip);
                 Vector2 anchorNorm = UniTextProp.GetAnchorNormalized(prop.boardAnchor);
                 bool anchorMismatch = !dispMat.HasProperty("_AnchorOffset") ||
                     ((Vector2)dispMat.GetVector("_AnchorOffset") - anchorNorm).sqrMagnitude > 1e-6f;
@@ -227,6 +232,7 @@ namespace UniText.Editor
                     rowPx != UniTextProp.DefaultRowPx ||
                     !dispMat.HasProperty("_LiveGeometry") ||
                     !Mathf.Approximately(dispMat.GetFloat("_LiveGeometry"), liveGeometry) ||
+                    autoFlipMismatch ||
                     anchorMismatch;
                 if (needsClone)
                 {
@@ -235,11 +241,14 @@ namespace UniText.Editor
                     dispMat.SetFloat("_DisplayRows", displayRows);
                     dispMat.SetFloat("_RowPx", rowPx);
                     dispMat.SetFloat("_LiveGeometry", liveGeometry);
+                    dispMat.SetFloat("_AutoFlip", desiredAutoFlip);
                     dispMat.SetVector("_AnchorOffset", new Vector4(anchorNorm.x, anchorNorm.y, 0f, 0f));
                     ctx.AssetSaver.SaveAsset(dispMat);
                 }
                 dispRenderer.sharedMaterial = dispMat;
             }
+
+            ApplyExpandedBillboardBounds(ctx, prop, displayQuad, displayRows, rowPx);
 
             // 1. Optional Modular Avatar Bone Proxy for SideFollowAnchor
             if (prop.useBoneProxy)
@@ -269,22 +278,35 @@ namespace UniText.Editor
                     title,
                     prop.installTargetMenu,
                     prop.syncWorldDrop,
+                    prop.syncBillboard,
                     prop.allowRuntimeResize,
                     recordUndo: false
                 );
             }
-            else if (!prop.allowRuntimeResize)
+            else
             {
-                UniTextMenuUtility.DeactivateResizeMenuItems(menuSearchScope);
+                if (!prop.allowRuntimeResize)
+                {
+                    UniTextMenuUtility.DeactivateResizeMenuItems(menuSearchScope);
+                }
+                if (prop.installMenu)
+                {
+                    GameObject existingMenuRoot = UniTextMenuUtility.FindMenuRoot(root, isSingleProp ? ctx.AvatarRootObject : null);
+                    if (existingMenuRoot != null)
+                    {
+                        UniTextMenuUtility.EnsureSelfViewSubMenu(existingMenuRoot, menuSearchScope, recordUndo: false);
+                    }
+                }
             }
 
-            UniTextMenuUtility.AlignBuildMenuItemSyncFlags(menuSearchScope, prop.syncWorldDrop);
+            UniTextMenuUtility.AlignBuildMenuItemSyncFlags(menuSearchScope, prop.syncWorldDrop, prop.syncBillboard);
 
             Dictionary<string, UniTextMenuUtility.MenuParameterOverride> menuOverrides =
                 UniTextMenuUtility.CollectActiveMenuParameterOverrides(ctx.AvatarRootObject);
             bool visibleDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamVisible, false);
             bool worldDropDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamWorldDrop, false);
             bool billboardDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamBillboard, false);
+            bool selfViewHeadDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamSelfViewHead, false);
 
             // 2. VRCParentConstraint on BoardPivot (Side Follow / World Drop)
             var constraint = boardPivot.GetComponent<VRCParentConstraint>() ?? boardPivot.gameObject.AddComponent<VRCParentConstraint>();
@@ -301,6 +323,20 @@ namespace UniText.Editor
             constraint.AffectsRotationZ = false;
             constraint.ApplyConfigurationChanges();
 
+            // 2b. Non-destructive local-only Self View rig (Approach A: Dual Quad + Mirror/Camera view filter)
+            BuildSelfViewRig(
+                ctx,
+                prop,
+                root,
+                displayQuad,
+                baseQuadMesh,
+                dispMat,
+                displayRows,
+                rowPx,
+                selfViewHeadDefault,
+                out UniTextPlacementUtility.SelfViewMetrics selfViewMetrics
+            );
+
             // Match UniText_Visible default in built avatar while leaving Edit Mode preview visible
             boardPivot.gameObject.SetActive(visibleDefault);
             if (paramCam != null)
@@ -316,7 +352,12 @@ namespace UniText.Editor
                 prop.HasD4Nibble,
                 visibleDefault,
                 worldDropDefault,
-                billboardDefault
+                billboardDefault,
+                selfViewHeadDefault,
+                selfViewMetrics.DistMin,
+                selfViewMetrics.DistMax,
+                selfViewMetrics.HeightMin,
+                selfViewMetrics.HeightMax
             );
 
             var mergeAnimator = root.GetComponent<ModularAvatarMergeAnimator>() ?? root.AddComponent<ModularAvatarMergeAnimator>();
@@ -332,6 +373,7 @@ namespace UniText.Editor
                 payloadBytes,
                 prop.HasD4Nibble,
                 prop.syncWorldDrop,
+                prop.syncBillboard,
                 prop.syncWideRows,
                 displayRows,
                 rowPx,
@@ -341,6 +383,200 @@ namespace UniText.Editor
 
             // 5. Remove UniTextProp marker so no custom script remains on final avatar
             UnityEngine.Object.DestroyImmediate(prop);
+        }
+
+        private static void BuildSelfViewRig(
+            BuildContext ctx,
+            UniTextProp prop,
+            GameObject root,
+            Transform displayQuad,
+            Mesh baseQuadMesh,
+            Material dispMat,
+            int displayRows,
+            int rowPx,
+            bool defaultFollowHead,
+            out UniTextPlacementUtility.SelfViewMetrics metrics)
+        {
+            metrics = UniTextPlacementUtility.ComputeSelfViewMetrics(ctx.AvatarRootObject);
+
+            var bodyAnchor = new GameObject("SelfViewBodyAnchor");
+            bodyAnchor.transform.SetParent(root.transform, false);
+            bodyAnchor.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
+            if (metrics.BodyBone != null)
+            {
+                var bodyProxy = bodyAnchor.AddComponent<ModularAvatarBoneProxy>();
+                bodyProxy.target = metrics.BodyBone;
+                bodyProxy.attachmentMode = BoneProxyAttachmentMode.AsChildKeepWorldPose;
+            }
+
+            var headAnchor = new GameObject("SelfViewHeadAnchor");
+            headAnchor.transform.SetParent(root.transform, false);
+            headAnchor.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
+            Transform headTarget = metrics.HeadBone != null ? metrics.HeadBone : metrics.BodyBone;
+            if (headTarget != null)
+            {
+                var headProxy = headAnchor.AddComponent<ModularAvatarBoneProxy>();
+                headProxy.target = headTarget;
+                headProxy.attachmentMode = BoneProxyAttachmentMode.AsChildKeepWorldPose;
+            }
+
+            var rig = new GameObject("SelfViewRig");
+            rig.transform.SetParent(root.transform, false);
+            rig.SetActive(false);
+
+            var bodyPivot = new GameObject("BodyPivot");
+            bodyPivot.transform.SetParent(rig.transform, false);
+            bodyPivot.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
+            var bodyConstraint = bodyPivot.AddComponent<VRCParentConstraint>();
+            bodyConstraint.SetSources(new[] { new VRCConstraintSource(bodyAnchor.transform, 1f) });
+            bodyConstraint.GlobalWeight = 1f;
+            bodyConstraint.IsActive = true;
+            bodyConstraint.Locked = true;
+            bodyConstraint.FreezeToWorld = false;
+            bodyConstraint.AffectsPositionX = true;
+            bodyConstraint.AffectsPositionY = true;
+            bodyConstraint.AffectsPositionZ = true;
+            bodyConstraint.AffectsRotationX = false;
+            bodyConstraint.AffectsRotationY = true;
+            bodyConstraint.AffectsRotationZ = false;
+            bodyConstraint.ApplyConfigurationChanges();
+
+            var headPivot = new GameObject("HeadPivot");
+            headPivot.transform.SetParent(rig.transform, false);
+            headPivot.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
+            var headConstraint = headPivot.AddComponent<VRCParentConstraint>();
+            headConstraint.SetSources(new[] { new VRCConstraintSource(headAnchor.transform, 1f) });
+            headConstraint.GlobalWeight = 1f;
+            headConstraint.IsActive = true;
+            headConstraint.Locked = true;
+            headConstraint.FreezeToWorld = false;
+            headConstraint.AffectsPositionX = true;
+            headConstraint.AffectsPositionY = true;
+            headConstraint.AffectsPositionZ = true;
+            headConstraint.AffectsRotationX = true;
+            headConstraint.AffectsRotationY = true;
+            headConstraint.AffectsRotationZ = false;
+            headConstraint.ApplyConfigurationChanges();
+
+            var boardHolder = new GameObject("BoardHolder");
+            boardHolder.transform.SetParent(rig.transform, false);
+            boardHolder.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
+            var holderConstraint = boardHolder.AddComponent<VRCParentConstraint>();
+            holderConstraint.SetSources(new[]
+            {
+                new VRCConstraintSource(bodyPivot.transform, defaultFollowHead ? 0f : 1f),
+                new VRCConstraintSource(headPivot.transform, defaultFollowHead ? 1f : 0f)
+            });
+            holderConstraint.GlobalWeight = 1f;
+            holderConstraint.IsActive = true;
+            holderConstraint.Locked = true;
+            holderConstraint.FreezeToWorld = false;
+            holderConstraint.AffectsPositionX = true;
+            holderConstraint.AffectsPositionY = true;
+            holderConstraint.AffectsPositionZ = true;
+            holderConstraint.AffectsRotationX = true;
+            holderConstraint.AffectsRotationY = true;
+            holderConstraint.AffectsRotationZ = true;
+            holderConstraint.ApplyConfigurationChanges();
+
+            var offsetHeight = new GameObject("OffsetHeight");
+            offsetHeight.transform.SetParent(boardHolder.transform, false);
+            offsetHeight.transform.localPosition = new Vector3(0f, 0.5f * (metrics.HeightMin + metrics.HeightMax), 0f);
+
+            var offsetDist = new GameObject("OffsetDist");
+            offsetDist.transform.SetParent(offsetHeight.transform, false);
+            offsetDist.transform.localPosition = new Vector3(0f, 0f, 0.5f * (metrics.DistMin + metrics.DistMax));
+            offsetDist.transform.localScale = new Vector3(0.65f, 0.65f, 0.65f);
+
+            var selfViewQuadGo = new GameObject("DisplayQuad");
+            selfViewQuadGo.transform.SetParent(offsetDist.transform, false);
+            selfViewQuadGo.transform.localPosition = Vector3.zero;
+            selfViewQuadGo.transform.localRotation = Quaternion.identity;
+            selfViewQuadGo.transform.localScale = displayQuad.localScale;
+
+            var meshFilter = selfViewQuadGo.AddComponent<MeshFilter>();
+            meshFilter.sharedMesh = baseQuadMesh;
+
+            var meshRenderer = selfViewQuadGo.AddComponent<MeshRenderer>();
+            meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            meshRenderer.receiveShadows = false;
+            meshRenderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
+            meshRenderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
+
+            if (dispMat != null)
+            {
+                var selfViewMat = new Material(dispMat) { name = $"{dispMat.name}_{root.name}_SelfView" };
+                selfViewMat.SetFloat("_DisplayRows", displayRows);
+                selfViewMat.SetFloat("_RowPx", rowPx);
+                selfViewMat.SetFloat("_LiveGeometry", prop.allowRuntimeResize ? 1f : 0f);
+                selfViewMat.SetVector("_AnchorOffset", Vector4.zero);
+                selfViewMat.SetFloat("_ViewFilter", 2f);
+                ctx.AssetSaver.SaveAsset(selfViewMat);
+                meshRenderer.sharedMaterial = selfViewMat;
+            }
+
+            ApplyExpandedBillboardBounds(ctx, prop, selfViewQuadGo.transform, displayRows, rowPx, UniTextBoardAnchor.Center);
+        }
+
+        private static void ApplyExpandedBillboardBounds(
+            BuildContext ctx,
+            UniTextProp prop,
+            Transform displayQuad,
+            int displayRows,
+            int rowPx,
+            UniTextBoardAnchor? anchorOverride = null)
+        {
+            MeshFilter meshFilter = displayQuad.GetComponent<MeshFilter>();
+            Mesh srcMesh = meshFilter != null ? meshFilter.sharedMesh : null;
+            if (srcMesh == null || srcMesh.vertexCount != 4 || srcMesh.bounds.size.z >= 1e-3f)
+            {
+                return;
+            }
+
+            float sx = Mathf.Max(Mathf.Abs(displayQuad.localScale.x), 1e-4f);
+            float sy = Mathf.Max(Mathf.Abs(displayQuad.localScale.y), 1e-4f);
+            float sz = Mathf.Max(Mathf.Abs(displayQuad.localScale.z), 1e-4f);
+
+            float minScaleX = 1f;
+            float maxScaleX = 1f;
+            float minScaleY = 1f;
+            float maxScaleY = 1f;
+            if (prop.allowRuntimeResize)
+            {
+                UniTextProp.ComputeRuntimeBounds(
+                    sx, sy, displayRows, rowPx, prop.syncWideRows,
+                    out float wMin, out float wMax, out _, out _, out float hMin, out float hMax
+                );
+                minScaleX = wMin / sx;
+                maxScaleX = wMax / sx;
+                minScaleY = hMin / sy;
+                maxScaleY = hMax / sy;
+            }
+
+            float maxW = sx * maxScaleX;
+            float maxH = sy * maxScaleY;
+            float rWorld = 0.5f * Mathf.Sqrt(maxW * maxW + maxH * maxH);
+            float rx = rWorld / sx;
+            float ry = rWorld / sy;
+            float rz = rWorld / sz;
+
+            Vector2 anchor = UniTextProp.GetAnchorNormalized(anchorOverride ?? prop.boardAnchor);
+            float pivotMinX = Mathf.Min(0f, anchor.x * (1f - minScaleX), anchor.x * (1f - maxScaleX));
+            float pivotMaxX = Mathf.Max(0f, anchor.x * (1f - minScaleX), anchor.x * (1f - maxScaleX));
+            float pivotMinY = Mathf.Min(0f, anchor.y * (1f - minScaleY), anchor.y * (1f - maxScaleY));
+            float pivotMaxY = Mathf.Max(0f, anchor.y * (1f - minScaleY), anchor.y * (1f - maxScaleY));
+
+            var expandedBounds = new Bounds();
+            expandedBounds.SetMinMax(
+                new Vector3(pivotMinX - rx, pivotMinY - ry, -rz),
+                new Vector3(pivotMaxX + rx, pivotMaxY + ry, rz)
+            );
+
+            Mesh expandedMesh = UnityEngine.Object.Instantiate(srcMesh);
+            expandedMesh.name = $"{srcMesh.name}_UniTextBounds";
+            expandedMesh.bounds = expandedBounds;
+            ctx.AssetSaver.SaveAsset(expandedMesh);
+            meshFilter.sharedMesh = expandedMesh;
         }
 
         internal static Transform ResolveHumanoidBone(GameObject avatarRoot, HumanBodyBones preferred)
@@ -379,6 +615,7 @@ namespace UniText.Editor
             int payloadBytes,
             bool hasD4Nibble,
             bool syncWorldDrop,
+            bool syncBillboard,
             bool syncWideRows,
             int displayRows,
             int rowPx,
@@ -400,11 +637,19 @@ namespace UniText.Editor
             bool opacitySaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamOpacity, true);
             bool widthSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamWidth, true);
             bool heightSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamHeight, true);
+            bool selfViewDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamSelfView, false);
+            bool selfViewSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamSelfView, true);
+            bool selfViewHeadDefault = ResolveDefault(menuOverrides, UniTextMenuUtility.ParamSelfViewHead, false);
+            bool selfViewHeadSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamSelfViewHead, true);
+            bool selfViewDistSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamSelfViewDist, true);
+            bool selfViewHeightSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamSelfViewHeight, true);
+            bool selfViewScaleSaved = ResolveSaved(menuOverrides, UniTextMenuUtility.ParamSelfViewScale, true);
 
             var list = new List<ParameterConfig>
             {
                 MakeParam("UniText_Visible", ParameterSyncType.Bool, visibleDefault ? 1f : 0f, saved: visibleSaved, internalParam: false, localOnly: false),
                 MakeParam("UniText_WorldDrop", syncWorldDrop ? ParameterSyncType.Bool : localBoolType, worldDropDefault ? 1f : 0f, saved: worldDropSaved, internalParam: false, localOnly: !syncWorldDrop),
+                MakeParam("UniText_Billboard", syncBillboard ? ParameterSyncType.Bool : localBoolType, billboardDefault ? 1f : 0f, saved: billboardSaved, internalParam: false, localOnly: !syncBillboard),
                 MakeParam("UniText_Ctrl", ParameterSyncType.Int, 0f, saved: false, internalParam: false, localOnly: false),
             };
 
@@ -439,7 +684,6 @@ namespace UniText.Editor
             list.Add(MakeParam("UniText_ProtoVer", localIntType, UniTextProp.ProtocolVersion, saved: false, internalParam: false, localOnly: true));
             list.Add(MakeParam("UniText_Rows", localIntType, displayRows, saved: false, internalParam: false, localOnly: true));
             list.Add(MakeParam("UniText_RowPx8", localIntType, rowPx / 8f, saved: false, internalParam: false, localOnly: true));
-            list.Add(MakeParam("UniText_Billboard", localBoolType, billboardDefault ? 1f : 0f, saved: billboardSaved, internalParam: false, localOnly: true));
             list.Add(MakeParam("UniText_Scale", localFloatType, 0.5f, saved: scaleSaved, internalParam: false, localOnly: true));
             list.Add(MakeParam("UniText_Opacity", localFloatType, 1f, saved: opacitySaved, internalParam: false, localOnly: true));
             list.Add(MakeParam("UniText_LocalClear", localBoolType, 0f, saved: false, internalParam: false, localOnly: true));
@@ -450,6 +694,11 @@ namespace UniText.Editor
                 list.Add(MakeParam("UniText_Width", localFloatType, 0.5f, saved: widthSaved, internalParam: false, localOnly: true));
                 list.Add(MakeParam("UniText_Height", localFloatType, 0.5f, saved: heightSaved, internalParam: false, localOnly: true));
             }
+            list.Add(MakeParam(UniTextMenuUtility.ParamSelfView, localBoolType, selfViewDefault ? 1f : 0f, saved: selfViewSaved, internalParam: false, localOnly: true));
+            list.Add(MakeParam(UniTextMenuUtility.ParamSelfViewHead, localBoolType, selfViewHeadDefault ? 1f : 0f, saved: selfViewHeadSaved, internalParam: false, localOnly: true));
+            list.Add(MakeParam(UniTextMenuUtility.ParamSelfViewDist, localFloatType, 0.5f, saved: selfViewDistSaved, internalParam: false, localOnly: true));
+            list.Add(MakeParam(UniTextMenuUtility.ParamSelfViewHeight, localFloatType, 0.5f, saved: selfViewHeightSaved, internalParam: false, localOnly: true));
+            list.Add(MakeParam(UniTextMenuUtility.ParamSelfViewScale, localFloatType, 0.5f, saved: selfViewScaleSaved, internalParam: false, localOnly: true));
             list.Add(MakeParam("UniText_One", ParameterSyncType.NotSynced, 1f, saved: false, internalParam: true, localOnly: false));
 
             return list;

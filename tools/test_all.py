@@ -1138,6 +1138,10 @@ def test_shaders_static() -> None:
         "UniTextExtractAtlasBit",
         "UniTextSampleGlyphBit",
         "UniTextSampleGlyphAndShadow",
+        "UniTextShouldFlipHorizontal",
+        "UNITY_MATRIX_V",
+        "unity_OrthoParams.w",
+        "determinant(",
         "UNITEXT_CRT_W",
         "UNITEXT_CRT_H",
         "UNITEXT_MAX_ROWS",
@@ -1217,7 +1221,15 @@ def test_shaders_static() -> None:
         "panelAspect",
         "_DisplayRows",
         "_RowPx",
+        "_ViewFilter",
+        "_AutoFlip",
+        "_VRChatMirrorMode",
+        "_VRChatCameraMode",
+        "_VRChatFaceMirrorMode",
+        "UniTextShouldFlipHorizontal(",
         "physRow",
+        '"DisableBatching"="True"',
+        "rsqrt(distSq)",
     ]:
         assert disp_req in display, f"Display.shader missing '{disp_req}'"
 
@@ -1241,6 +1253,137 @@ def test_shaders_static() -> None:
         "USING_STEREO_MATRICES",
     ]:
         assert macro in display, f"Display.shader missing VR SPS-I macro {macro}"
+
+    for attr_args in re.findall(r"\[(?:Enum|KeywordEnum)\(([^\]\r\n]+)\)\]", display):
+        assert "(" not in attr_args and "+" not in attr_args, (
+            f"Display.shader has invalid ShaderLab Enum attribute syntax: [{attr_args}]"
+        )
+
+    _verify_auto_flip_math()
+
+
+def _should_flip_horizontal_hlsl(
+    view_matrix_4x4: np.ndarray,
+    world_pivot: np.ndarray,
+    world_right: np.ndarray,
+    world_up: np.ndarray,
+    auto_flip_mode: float,
+    vrc_mirror_mode: float = 0.0,
+    vrc_face_mirror_mode: float = 0.0,
+    is_ortho: bool = False,
+) -> bool:
+    """Exact Python/NumPy mirror of UniTextShouldFlipHorizontal in UniTextCommon.cginc."""
+    if auto_flip_mode < 0.5:
+        return False
+
+    view_rot = view_matrix_4x4[:3, :3]
+    view_right = view_rot @ world_right
+    view_up = view_rot @ world_up
+    view_pos = (view_matrix_4x4 @ np.array([world_pivot[0], world_pivot[1], world_pivot[2], 1.0], dtype=np.float64))[:3]
+    to_cam_view = np.array([0.0, 0.0, 1.0], dtype=np.float64) if is_ortho else -view_pos
+    view_orient = float(np.dot(np.cross(view_right, view_up), to_cam_view))
+
+    det_v = float(np.linalg.det(view_rot))
+    is_mirror_cam = (vrc_mirror_mode > 0.5) or (det_v > 0.0)
+    is_ui_flipped_face_mirror = (vrc_face_mirror_mode > 0.5) and (det_v <= 0.0)
+
+    if auto_flip_mode < 1.5:
+        flip_x = is_mirror_cam and (view_orient < 0.0)
+        if is_ui_flipped_face_mirror and (view_orient >= 0.0):
+            flip_x = True
+    else:
+        flip_x = view_orient < 0.0
+        if is_ui_flipped_face_mirror:
+            flip_x = not flip_x
+    return flip_x
+
+
+def _make_unity_view_matrix(cam_pos: Sequence[float], target: Sequence[float], up_hint: Sequence[float] = (0.0, 1.0, 0.0)) -> np.ndarray:
+    """Builds a Unity LH-world -> RH-view 4x4 matrix (det(3x3) = -1)."""
+    pos = np.array(cam_pos, dtype=np.float64)
+    fwd = np.array(target, dtype=np.float64) - pos
+    fwd /= np.linalg.norm(fwd)
+    right = np.cross(np.array(up_hint, dtype=np.float64), fwd)
+    right /= np.linalg.norm(right)
+    up = np.cross(fwd, right)
+    rot = np.vstack([right, up, -fwd])
+    mat = np.eye(4, dtype=np.float64)
+    mat[:3, :3] = rot
+    mat[:3, 3] = -(rot @ pos)
+    assert np.isclose(np.linalg.det(rot), -1.0)
+    return mat
+
+
+def _make_reflection_matrix(plane_point: Sequence[float], plane_normal: Sequence[float]) -> np.ndarray:
+    """Builds a 4x4 reflection matrix across an arbitrary world plane."""
+    p0 = np.array(plane_point, dtype=np.float64)
+    n = np.array(plane_normal, dtype=np.float64)
+    n /= np.linalg.norm(n)
+    r3 = np.eye(3, dtype=np.float64) - 2.0 * np.outer(n, n)
+    mat = np.eye(4, dtype=np.float64)
+    mat[:3, :3] = r3
+    mat[:3, 3] = 2.0 * np.dot(n, p0) * n
+    return mat
+
+
+def _verify_auto_flip_math() -> None:
+    pivot = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+    cam_front = _make_unity_view_matrix((0.0, 0.0, -2.0), (0.0, 0.0, 0.0))
+    cam_back = _make_unity_view_matrix((0.0, 0.0, 2.0), (0.0, 0.0, 0.0))
+    cam_rolled = _make_unity_view_matrix((0.0, 0.0, -2.0), (0.0, 0.0, 0.0), up_hint=(0.0, -1.0, 0.0))
+
+    # Unity Quad front faces -Z: local +X = (1,0,0), +Y = (0,1,0)
+    q_front_r, q_front_u = np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])
+    # Rotated 180 deg around Y (faces +Z, e.g. facing a mirror at +Z)
+    q_mirror_r, q_mirror_u = np.array([-1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])
+
+    # Mode 0 (Off): never flips
+    for m in (cam_front, cam_back, cam_front @ _make_reflection_matrix((0.0, 0.0, 1.0), (0.0, 0.0, -1.0))):
+        assert not _should_flip_horizontal_hlsl(m, pivot, q_front_r, q_front_u, 0.0, vrc_mirror_mode=1.0)
+        assert not _should_flip_horizontal_hlsl(m, pivot, q_mirror_r, q_mirror_u, 0.0, vrc_mirror_mode=1.0)
+
+    # Normal camera: front -> False, back -> True (mode 2) / False (mode 1), rolled 180 -> False
+    assert not _should_flip_horizontal_hlsl(cam_front, pivot, q_front_r, q_front_u, 2.0)
+    assert _should_flip_horizontal_hlsl(cam_back, pivot, q_front_r, q_front_u, 2.0)
+    assert not _should_flip_horizontal_hlsl(cam_back, pivot, q_front_r, q_front_u, 1.0)
+    assert not _should_flip_horizontal_hlsl(cam_rolled, pivot, q_front_r, q_front_u, 2.0)
+
+    # Mirrors (vertical at z=1, tilted 45 deg, floor mirror at y=-1): works both with and without _VRChatMirrorMode
+    # Each tuple: (reflection_matrix, panel_facing_mirror_right, panel_facing_mirror_up, panel_away_right, panel_away_up)
+    q_floor_down_r, q_floor_down_u = np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, -1.0])
+    mirror_cases = [
+        (_make_reflection_matrix((0.0, 0.0, 1.0), (0.0, 0.0, -1.0)), q_mirror_r, q_mirror_u, q_front_r, q_front_u),
+        (_make_reflection_matrix((1.0, 0.0, 1.0), (-1.0, 0.0, -1.0)), q_mirror_r, q_mirror_u, q_front_r, q_front_u),
+        (_make_reflection_matrix((0.0, -1.0, 0.0), (0.0, 1.0, 0.0)), q_floor_down_r, q_floor_down_u, q_mirror_r, q_mirror_u),
+        (_make_reflection_matrix((0.0, -1.0, 0.0), (0.0, 1.0, 0.0)), q_front_r, q_front_u, q_mirror_r, q_mirror_u),
+    ]
+    for refl, front_r, front_u, back_r, back_u in mirror_cases:
+        cam_mirror = cam_front @ refl
+        for vrc_flag in (0.0, 1.0):
+            for mode in (1.0, 2.0):
+                # Panel facing mirror is seen front-on in mirror -> must flip!
+                assert _should_flip_horizontal_hlsl(cam_mirror, pivot, front_r, front_u, mode, vrc_mirror_mode=vrc_flag)
+                # Panel facing away from mirror shows its back in mirror -> already right-side up, must NOT double-flip!
+                assert not _should_flip_horizontal_hlsl(cam_mirror, pivot, back_r, back_u, mode, vrc_mirror_mode=vrc_flag)
+
+    # Billboard facing camera in mirror: worldRight/worldUp point toward virtual mirror camera,
+    # which mirrors the exact same hand-flipped basis -> must flip in mirror, not in normal view.
+    bb_normal_r, bb_normal_u = np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])
+    assert not _should_flip_horizontal_hlsl(cam_front, pivot, bb_normal_r, bb_normal_u, 2.0)
+    cam_vert_mirror = cam_front @ mirror_cases[0][0]
+    # Virtual mirror camera is at (0,0,+4), so billboard facing +Z produces right=(-1,0,0), up=(0,1,0)
+    assert _should_flip_horizontal_hlsl(cam_vert_mirror, pivot, np.array([-1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0]), 2.0, vrc_mirror_mode=1.0)
+
+    # Face Mirror: reflected camera vs UI-flipped non-reflected camera
+    assert _should_flip_horizontal_hlsl(cam_vert_mirror, pivot, q_mirror_r, q_mirror_u, 2.0, vrc_face_mirror_mode=1.0)
+    assert _should_flip_horizontal_hlsl(cam_front, pivot, q_front_r, q_front_u, 2.0, vrc_face_mirror_mode=1.0)
+    assert _should_flip_horizontal_hlsl(cam_front, pivot, q_front_r, q_front_u, 1.0, vrc_face_mirror_mode=1.0)
+
+    # Orthographic camera off-center quad
+    off_pivot = np.array([1.5, -0.4, 0.0], dtype=np.float64)
+    assert not _should_flip_horizontal_hlsl(cam_front, off_pivot, q_front_r, q_front_u, 2.0, is_ortho=True)
+    assert _should_flip_horizontal_hlsl(cam_back, off_pivot, q_front_r, q_front_u, 2.0, is_ortho=True)
+    assert _should_flip_horizontal_hlsl(cam_vert_mirror, off_pivot, q_mirror_r, q_mirror_u, 2.0, is_ortho=True)
 
 
 def test_unity_package_integrity() -> None:
@@ -1290,6 +1433,8 @@ def test_unity_package_integrity() -> None:
         "Opacity.png",
         "Width.png",
         "Height.png",
+        "SelfView.png",
+        "FollowHead.png",
     )
     for icon_name in icon_names:
         icon_path = icons_dir / icon_name
@@ -1358,6 +1503,18 @@ def test_unity_package_integrity() -> None:
         "allowDynamicResolution = false",
         "encoderQuad.layer = ParamBridgeLayer",
         "defaultVisible",
+        "syncBillboard",
+        "allowRuntimeResize",
+        "autoFlipText",
+        "_AutoFlip",
+        "IsLocal",
+        "UniText_SelfView",
+        "UniText_SelfViewHead",
+        "UniText_SelfViewDist",
+        "UniText_SelfViewHeight",
+        "UniText_SelfViewScale",
+        "SelfViewRig",
+        "Sources.source0.Weight",
     ):
         assert tok in builder_src, f"UniTextAssetBuilder.cs missing '{tok}'"
     for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "UniText_ParamCamera", "BuildConstantLayer", "TwoAxisPuppet", "CreateMenuHierarchyInMemory"):
@@ -1379,6 +1536,13 @@ def test_unity_package_integrity() -> None:
         "UniText_Width",
         "UniText_Height",
         "Appearance",
+        "Self View",
+        "UniText_SelfView",
+        "UniText_SelfViewHead",
+        "UniText_SelfViewDist",
+        "UniText_SelfViewHeight",
+        "UniText_SelfViewScale",
+        "EnsureSelfViewSubMenu",
         "automaticValue",
         "isSynced",
         "isSaved",
@@ -1389,9 +1553,12 @@ def test_unity_package_integrity() -> None:
         "LoadMenuIcon",
         "GetDefaultIconForParameter",
         "GetDefaultRootMenuIcon",
+        "GetDefaultSelfViewMenuIcon",
         "ApplyDefaultIconsIfMissing",
         "IconGuidUniText",
         "IconGuidAppearance",
+        "IconGuidSelfView",
+        "IconGuidFollowHead",
         '"ShowBoard"',
         '"WorldDrop"',
         '"Billboard"',
@@ -1400,6 +1567,8 @@ def test_unity_package_integrity() -> None:
         '"Opacity"',
         '"Width"',
         '"Height"',
+        '"SelfView"',
+        '"FollowHead"',
     ):
         assert tok in menu_util_src, f"UniTextMenuUtility.cs missing '{tok}'"
 
@@ -1411,11 +1580,13 @@ def test_unity_package_integrity() -> None:
         "HasD4Nibble",
         "PayloadBits",
         "GetBaseSyncedBits",
+        "syncBillboard",
         "syncWideRows",
         "viewportWidth",
         "displayRows",
         "NeedsRowPage",
         "ComputeRuntimeBounds",
+        "autoFlipText",
         "UniTextBoardAnchor",
         "UniTextPlacementPreset",
     ):
@@ -1431,6 +1602,8 @@ def test_unity_package_integrity() -> None:
         "HasD4Nibble",
         "UniText_D4b",
         "45b",
+        "syncBillboard",
+        "UniText_Billboard",
         "syncWideRows",
     ):
         assert chk_tok in checker_src, f"UniTextParameterChecker.cs missing '{chk_tok}'"
@@ -1456,6 +1629,7 @@ def test_unity_package_integrity() -> None:
         if mat_path.name.startswith("UniText_Display_"):
             assert "- _DisplayRows: 6" in mat_txt and "- _RowPx: 384" in mat_txt
             assert "_AuxTex:" in mat_txt and "- _LiveGeometry: 1" in mat_txt
+            assert "- _AutoFlip: 2" in mat_txt
             assert "- _AnchorOffset: {r: 0.5, g: -0.5, b: 0, a: 0}" in mat_txt
         for ref_guid in re.findall(r"guid:\s*([0-9a-f]{32})", mat_txt):
             assert ref_guid in known_guids, f"Broken GUID {ref_guid} in {mat_path.name}"
@@ -1476,6 +1650,8 @@ def test_unity_package_integrity() -> None:
         "ProtocolVersion",
         "UniText_D4b",
         "_LiveGeometry",
+        "autoFlipText",
+        "_AutoFlip",
         "UniText_Bank",
         "UniText_RowPage",
         "UniText_Rows",
@@ -1494,6 +1670,14 @@ def test_unity_package_integrity() -> None:
         "CreateMenuHierarchy",
         "CollectActiveMenuParameterOverrides",
         "AlignBuildMenuItemSyncFlags",
+        "syncBillboard",
+        "ApplyExpandedBillboardBounds",
+        "_UniTextBounds",
+        "SelfViewRig",
+        "SelfViewBodyAnchor",
+        "SelfViewHeadAnchor",
+        "ParamSelfView",
+        "EnsureSelfViewSubMenu",
     ]:
         assert req_token in ndmf_src, f"UniTextNdmfPlugin.cs missing '{req_token}'"
     for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "CreateMenuHierarchyInMemory"):
@@ -1521,6 +1705,8 @@ def test_unity_package_integrity() -> None:
         "DrawFollowBonePopup",
         "UniTextMenuUtility",
         "ApplyMenuSettings",
+        "syncBillboard",
+        "_autoFlipText",
     ):
         assert req_token in installer_src, f"UniTextInstallerWindow.cs missing '{req_token}'"
     assert "(HumanBodyBones)EditorGUILayout.EnumPopup" not in installer_src, (
@@ -1549,7 +1735,9 @@ def test_unity_package_integrity() -> None:
         prefab_txt = prefab_path.read_text(encoding="utf-8")
         assert prop_guid in prefab_txt
         assert f"tier: {expected_tier}" in prefab_txt
+        assert "syncBillboard: 1" in prefab_txt
         assert "syncWideRows: 1" in prefab_txt
+        assert "autoFlipText: 1" in prefab_txt
         assert "viewportWidth: 0.84" in prefab_txt and "displayRows: 6" in prefab_txt
         assert "boardAnchor: 1" in prefab_txt
         assert "m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}" in prefab_txt
@@ -1616,6 +1804,10 @@ def test_vpm_packaging_dry_run() -> None:
                 "Icons/Opacity.png",
                 "Icons/Width.png",
                 "Icons/Height.png",
+                "Icons/SelfView.png",
+                "Icons/SelfView.png.meta",
+                "Icons/FollowHead.png",
+                "Icons/FollowHead.png.meta",
                 "Prefabs/Board_Compact_45b.prefab",
                 "Prefabs/Board_Standard_73b.prefab",
             ):

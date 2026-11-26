@@ -69,9 +69,10 @@ All data channels **MUST** be declared as **`Int`** (`0..255`) in VRChat `VRCExp
 | `UniText_Rows` | `/avatar/parameters/UniText_Rows` | `Int` (local-only) | **0** | Present | Present | Present | Present | Present | `false` | `6` | Configured base visible row count `base_rows ∈ [4, 12]` |
 | `UniText_RowPx8` | `/avatar/parameters/UniText_RowPx8` | `Int` (local-only) | **0** | Present | Present | Present | Present | Present | `false` | `48` | Base logical row width in 8 px units (`base_row_px = VALUE * 8`, `192..640 px`) |
 
-Local / UI prop-control parameters (`0` synced bits unless `syncWorldDrop` is enabled):
+Local / UI prop-control parameters (`0` synced bits unless `syncWorldDrop` / `syncBillboard` are enabled):
 - `UniText_WorldDrop` (`Bool`, `1` synced bit when `syncWorldDrop = true`): `false = Side Follow`, `true = World Drop (FreezeToWorld)`.
-- `UniText_Billboard`, `UniText_LocalClear` (`Bool`, local-only), `UniText_Scale`, `UniText_Opacity` (`Float`, local-only).
+- `UniText_Billboard` (`Bool`, `1` synced bit when `syncBillboard = true`): `false = Fixed Orientation`, `true = Per-Viewer Stereo Billboard`.
+- `UniText_LocalClear` (`Bool`, local-only), `UniText_Scale`, `UniText_Opacity` (`Float`, local-only).
 
 ### 2.2 OSCQuery Auto-Detection & Live Resize Reflow
 

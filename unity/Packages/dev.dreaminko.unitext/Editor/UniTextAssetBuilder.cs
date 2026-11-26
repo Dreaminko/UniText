@@ -33,6 +33,8 @@ namespace UniText.Editor
             "Opacity.png",
             "Width.png",
             "Height.png",
+            "SelfView.png",
+            "FollowHead.png",
         };
 
         private static readonly (UniTextTier Tier, string Name, int PayloadBytes, int Bits, string PrefabName)[] Tiers =
@@ -108,7 +110,12 @@ namespace UniText.Editor
             bool hasD4Nibble = false,
             bool defaultVisible = false,
             bool defaultWorldDrop = false,
-            bool defaultBillboard = false)
+            bool defaultBillboard = false,
+            bool defaultSelfViewHead = false,
+            float selfViewDistMin = 0.45f,
+            float selfViewDistMax = 1.15f,
+            float selfViewHeightMin = -0.34f,
+            float selfViewHeightMax = 0.26f)
         {
             var controller = new AnimatorController { name = $"UniText_FX_{tierName}" };
             saveAsset?.Invoke(controller);
@@ -128,8 +135,11 @@ namespace UniText.Editor
                     AddParam(controller, $"UniText_D4b{bit}", AnimatorControllerParameterType.Float, defaultFloat: 0f);
                 }
             }
+            AddParam(controller, "IsLocal", AnimatorControllerParameterType.Bool, defaultBool: false);
             AddParam(controller, "UniText_Visible", AnimatorControllerParameterType.Bool, defaultBool: defaultVisible);
             AddParam(controller, "UniText_WorldDrop", AnimatorControllerParameterType.Bool, defaultBool: defaultWorldDrop);
+            AddParam(controller, "UniText_SelfView", AnimatorControllerParameterType.Bool, defaultBool: false);
+            AddParam(controller, "UniText_SelfViewHead", AnimatorControllerParameterType.Bool, defaultBool: defaultSelfViewHead);
             // Column bank & row page (synced Bool in VRCExpressionParameters, Float here so Direct BlendTree drives EncoderQuad)
             AddParam(controller, "UniText_Bank", AnimatorControllerParameterType.Float, defaultFloat: 0f);
             AddParam(controller, "UniText_RowPage", AnimatorControllerParameterType.Float, defaultFloat: 0f);
@@ -137,9 +147,21 @@ namespace UniText.Editor
             AddParam(controller, "UniText_Scale", AnimatorControllerParameterType.Float, defaultFloat: 0.5f);
             AddParam(controller, "UniText_Opacity", AnimatorControllerParameterType.Float, defaultFloat: 1f);
             AddParam(controller, "UniText_LocalClear", AnimatorControllerParameterType.Float, defaultFloat: 0f);
+            AddParam(controller, "UniText_SelfViewDist", AnimatorControllerParameterType.Float, defaultFloat: 0.5f);
+            AddParam(controller, "UniText_SelfViewHeight", AnimatorControllerParameterType.Float, defaultFloat: 0.5f);
+            AddParam(controller, "UniText_SelfViewScale", AnimatorControllerParameterType.Float, defaultFloat: 0.5f);
 
-            // Layer 0: Single Direct BlendTree driving all numeric uniforms + Scale/Opacity/Billboard/LocalClear
-            BuildDirectBlendTreeLayer(controller, payloadBytes, hasD4Nibble, saveAsset);
+            // Layer 0: Single Direct BlendTree driving all numeric uniforms + Scale/Opacity/Billboard/LocalClear + SelfView offsets
+            BuildDirectBlendTreeLayer(
+                controller,
+                payloadBytes,
+                hasD4Nibble,
+                selfViewDistMin,
+                selfViewDistMax,
+                selfViewHeightMin,
+                selfViewHeightMax,
+                saveAsset
+            );
 
             // Layer 1: BoardPivot visibility + ParamCamera enabled toggle
             BuildBoolLayer(
@@ -162,6 +184,20 @@ namespace UniText.Editor
                 CreateSingleValueClip("WorldDrop_Freeze", "BoardPivot", constraintType, "FreezeToWorld", 1f, saveAsset),
                 saveAsset,
                 defaultWorldDrop
+            );
+
+            // Layer 3: Local-only Self View rig + main DisplayQuad mirror/camera view filter
+            BuildSelfViewLayer(controller, saveAsset);
+
+            // Layer 4: Self View follow mode (Body vs Head)
+            BuildBoolLayer(
+                controller,
+                "UniText_SelfViewFollow",
+                "UniText_SelfViewHead",
+                CreateDualSourceWeightClip("SelfView_Body", "SelfViewRig/BoardHolder", constraintType, 1f, 0f, saveAsset),
+                CreateDualSourceWeightClip("SelfView_Head", "SelfViewRig/BoardHolder", constraintType, 0f, 1f, saveAsset),
+                saveAsset,
+                defaultSelfViewHead
             );
 
             return controller;
@@ -424,6 +460,7 @@ namespace UniText.Editor
             }
             // Prefabs default to allowRuntimeResize = true and BottomRight inner-bottom anchor; NDMF re-bakes per UniTextProp.
             mat.SetFloat("_LiveGeometry", 1f);
+            mat.SetFloat("_AutoFlip", 2f);
             Vector2 defaultAnchor = UniTextProp.GetAnchorNormalized(UniTextBoardAnchor.BottomRight);
             mat.SetVector("_AnchorOffset", new Vector4(defaultAnchor.x, defaultAnchor.y, 0f, 0f));
             EditorUtility.SetDirty(mat);
@@ -434,6 +471,10 @@ namespace UniText.Editor
             AnimatorController controller,
             int payloadBytes,
             bool hasD4Nibble,
+            float selfViewDistMin,
+            float selfViewDistMax,
+            float selfViewHeightMin,
+            float selfViewHeightMax,
             Action<UnityEngine.Object> saveAsset)
         {
             var sm = new AnimatorStateMachine { name = "UniText_DataBlend" };
@@ -506,7 +547,34 @@ namespace UniText.Editor
                 "BoardPivot/DisplayQuad", "material._Opacity",
                 0f, 1f, 0.12f, 1.0f, saveAsset
             ));
-            directChildren.Add(Build1DScaleChild(saveAsset));
+            directChildren.Add(Build1DScaleChild(
+                "Scale", "UniText_Scale", "BoardPivot",
+                new Vector3(0.5f, 0.5f, 0.5f), new Vector3(1.5f, 1.5f, 1.5f), saveAsset
+            ));
+
+            const string selfViewQuadPath = "SelfViewRig/BoardHolder/OffsetHeight/OffsetDist/DisplayQuad";
+            directChildren.Add(Build1DRangeChild(
+                "SelfViewBillboard", "UniText_Billboard",
+                selfViewQuadPath, "material._Billboard",
+                0f, 1f, 0f, 1f, saveAsset
+            ));
+            directChildren.Add(Build1DRangeChild(
+                "SelfViewOpacity", "UniText_Opacity",
+                selfViewQuadPath, "material._Opacity",
+                0f, 1f, 0.12f, 1.0f, saveAsset
+            ));
+            directChildren.Add(Build1DPositionChild(
+                "SelfViewHeight", "UniText_SelfViewHeight", "SelfViewRig/BoardHolder/OffsetHeight",
+                new Vector3(0f, selfViewHeightMin, 0f), new Vector3(0f, selfViewHeightMax, 0f), saveAsset
+            ));
+            directChildren.Add(Build1DPositionChild(
+                "SelfViewDist", "UniText_SelfViewDist", "SelfViewRig/BoardHolder/OffsetHeight/OffsetDist",
+                new Vector3(0f, 0f, selfViewDistMin), new Vector3(0f, 0f, selfViewDistMax), saveAsset
+            ));
+            directChildren.Add(Build1DScaleChild(
+                "SelfViewScale", "UniText_SelfViewScale", "SelfViewRig/BoardHolder/OffsetHeight/OffsetDist",
+                new Vector3(0.30f, 0.30f, 0.30f), new Vector3(1.00f, 1.00f, 1.00f), saveAsset
+            ));
             // Live resize (rows / row_px + panel size) is driven by CMD_SET_GEOMETRY inside Display.shader, not by Animator curves.
 
             directTree.children = directChildren.ToArray();
@@ -561,19 +629,25 @@ namespace UniText.Editor
             };
         }
 
-        private static ChildMotion Build1DScaleChild(Action<UnityEngine.Object> saveAsset)
+        private static ChildMotion Build1DScaleChild(
+            string id,
+            string paramName,
+            string targetPath,
+            Vector3 scaleMin,
+            Vector3 scaleMax,
+            Action<UnityEngine.Object> saveAsset)
         {
             var subTree = new BlendTree
             {
-                name = "BT_Scale",
+                name = $"BT_{id}",
                 blendType = BlendTreeType.Simple1D,
-                blendParameter = "UniText_Scale",
+                blendParameter = paramName,
                 useAutomaticThresholds = false
             };
             saveAsset?.Invoke(subTree);
 
-            var clipMin = CreateScaleClip("Scale_Min", "BoardPivot", new Vector3(0.5f, 0.5f, 0.5f), saveAsset);
-            var clipMax = CreateScaleClip("Scale_Max", "BoardPivot", new Vector3(1.5f, 1.5f, 1.5f), saveAsset);
+            var clipMin = CreateVector3Clip($"{id}_Min", targetPath, "m_LocalScale", scaleMin, saveAsset);
+            var clipMax = CreateVector3Clip($"{id}_Max", targetPath, "m_LocalScale", scaleMax, saveAsset);
 
             subTree.AddChild(clipMin, 0f);
             subTree.AddChild(clipMax, 1f);
@@ -584,6 +658,82 @@ namespace UniText.Editor
                 directBlendParameter = "UniText_One",
                 timeScale = 1f
             };
+        }
+
+        private static ChildMotion Build1DPositionChild(
+            string id,
+            string paramName,
+            string targetPath,
+            Vector3 posMin,
+            Vector3 posMax,
+            Action<UnityEngine.Object> saveAsset)
+        {
+            var subTree = new BlendTree
+            {
+                name = $"BT_{id}",
+                blendType = BlendTreeType.Simple1D,
+                blendParameter = paramName,
+                useAutomaticThresholds = false
+            };
+            saveAsset?.Invoke(subTree);
+
+            var clipMin = CreateVector3Clip($"{id}_Min", targetPath, "m_LocalPosition", posMin, saveAsset);
+            var clipMax = CreateVector3Clip($"{id}_Max", targetPath, "m_LocalPosition", posMax, saveAsset);
+
+            subTree.AddChild(clipMin, 0f);
+            subTree.AddChild(clipMax, 1f);
+
+            return new ChildMotion
+            {
+                motion = subTree,
+                directBlendParameter = "UniText_One",
+                timeScale = 1f
+            };
+        }
+
+        private static void BuildSelfViewLayer(
+            AnimatorController controller,
+            Action<UnityEngine.Object> saveAsset)
+        {
+            var sm = new AnimatorStateMachine { name = "UniText_SelfView" };
+            saveAsset?.Invoke(sm);
+
+            var layer = new AnimatorControllerLayer
+            {
+                name = "UniText_SelfView",
+                defaultWeight = 1f,
+                stateMachine = sm
+            };
+            controller.AddLayer(layer);
+
+            var offState = sm.AddState("Off");
+            offState.motion = CreateSelfViewClip("SelfView_Off", false, saveAsset);
+            offState.writeDefaultValues = false;
+            saveAsset?.Invoke(offState);
+
+            var onState = sm.AddState("On");
+            onState.motion = CreateSelfViewClip("SelfView_On", true, saveAsset);
+            onState.writeDefaultValues = false;
+            saveAsset?.Invoke(onState);
+
+            sm.defaultState = offState;
+
+            var toOn = offState.AddTransition(onState);
+            toOn.hasExitTime = false;
+            toOn.duration = 0f;
+            toOn.AddCondition(AnimatorConditionMode.If, 0f, "IsLocal");
+            toOn.AddCondition(AnimatorConditionMode.If, 0f, "UniText_Visible");
+            toOn.AddCondition(AnimatorConditionMode.If, 0f, "UniText_SelfView");
+            saveAsset?.Invoke(toOn);
+
+            foreach (string guardParam in new[] { "IsLocal", "UniText_Visible", "UniText_SelfView" })
+            {
+                var toOff = onState.AddTransition(offState);
+                toOff.hasExitTime = false;
+                toOff.duration = 0f;
+                toOff.AddCondition(AnimatorConditionMode.IfNot, 0f, guardParam);
+                saveAsset?.Invoke(toOff);
+            }
         }
 
         private static void BuildBoolLayer(
@@ -660,17 +810,48 @@ namespace UniText.Editor
             return clip;
         }
 
-        private static AnimationClip CreateScaleClip(
+        private static AnimationClip CreateVector3Clip(
             string clipName,
             string relativePath,
-            Vector3 scale,
+            string propertyPrefix,
+            Vector3 value,
             Action<UnityEngine.Object> saveAsset)
         {
             var clip = new AnimationClip { name = clipName };
             float dt = 1f / 60f;
-            clip.SetCurve(relativePath, typeof(Transform), "m_LocalScale.x", AnimationCurve.Linear(0f, scale.x, dt, scale.x));
-            clip.SetCurve(relativePath, typeof(Transform), "m_LocalScale.y", AnimationCurve.Linear(0f, scale.y, dt, scale.y));
-            clip.SetCurve(relativePath, typeof(Transform), "m_LocalScale.z", AnimationCurve.Linear(0f, scale.z, dt, scale.z));
+            clip.SetCurve(relativePath, typeof(Transform), $"{propertyPrefix}.x", AnimationCurve.Linear(0f, value.x, dt, value.x));
+            clip.SetCurve(relativePath, typeof(Transform), $"{propertyPrefix}.y", AnimationCurve.Linear(0f, value.y, dt, value.y));
+            clip.SetCurve(relativePath, typeof(Transform), $"{propertyPrefix}.z", AnimationCurve.Linear(0f, value.z, dt, value.z));
+            saveAsset?.Invoke(clip);
+            return clip;
+        }
+
+        private static AnimationClip CreateSelfViewClip(
+            string clipName,
+            bool active,
+            Action<UnityEngine.Object> saveAsset)
+        {
+            float v = active ? 1f : 0f;
+            float dt = 1f / 60f;
+            var clip = new AnimationClip { name = clipName };
+            clip.SetCurve("SelfViewRig", typeof(GameObject), "m_IsActive", AnimationCurve.Linear(0f, v, dt, v));
+            clip.SetCurve("BoardPivot/DisplayQuad", typeof(MeshRenderer), "material._ViewFilter", AnimationCurve.Linear(0f, v, dt, v));
+            saveAsset?.Invoke(clip);
+            return clip;
+        }
+
+        private static AnimationClip CreateDualSourceWeightClip(
+            string clipName,
+            string relativePath,
+            Type targetType,
+            float weight0,
+            float weight1,
+            Action<UnityEngine.Object> saveAsset)
+        {
+            var clip = new AnimationClip { name = clipName };
+            float dt = 1f / 60f;
+            clip.SetCurve(relativePath, targetType, "Sources.source0.Weight", AnimationCurve.Linear(0f, weight0, dt, weight0));
+            clip.SetCurve(relativePath, targetType, "Sources.source1.Weight", AnimationCurve.Linear(0f, weight1, dt, weight1));
             saveAsset?.Invoke(clip);
             return clip;
         }
@@ -698,6 +879,7 @@ namespace UniText.Editor
                 prop.autoPositionToBone = true;
                 prop.boneOffset = UniTextProp.DefaultBoneOffset;
                 prop.syncWorldDrop = true;
+                prop.syncBillboard = true;
                 prop.syncWideRows = true;
                 prop.installMenu = true;
                 prop.menuName = "UniText";
@@ -708,6 +890,7 @@ namespace UniText.Editor
                 prop.autoFitRowPx = true;
                 prop.rowPx = UniTextProp.DefaultRowPx;
                 prop.allowRuntimeResize = true;
+                prop.autoFlipText = true;
                 prop.paramBridgeTexture = paramBridge;
                 prop.encoderMaterial = encoderMat;
                 prop.displayMaterial = displayMat;

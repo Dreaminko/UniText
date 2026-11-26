@@ -25,6 +25,7 @@ Include `Packages/dev.dreaminko.unitext/Shaders/UniTextCommon.cginc` in your cus
 | `UniTextGetGlyphRef` | `UniTextGlyphRef UniTextGetGlyphRef(sampler2D auxTex, uint cp)` | Resolves a codepoint's block class (`0 = tofu`, `1 = 11×11`, `2 = 12×16`) and bit offset from `UniTextAux_64x64.png`. |
 | `UniTextSampleGlyphBit` | `float UniTextSampleGlyphBit(sampler2D atlasTex, float atlasHeight, UniTextGlyphRef g, uint gx, uint gy)` | Samples pixel `(gx ∈ [0,15], gy ∈ [0,15])` (`1.0` lit, `0.0` off) from the packed atlas `FontAtlas_BMP_Packed.png` (pass `_FontAtlas_TexelSize.w` as `atlasHeight`). |
 | `UniTextSampleGlyphAndShadow` | `void UniTextSampleGlyphAndShadow(sampler2D atlasTex, float atlasHeight, UniTextGlyphRef g, uint gx, uint gy, bool sampleShadow, out float glyph, out float shadow)` | Samples foreground bit and right-down `(gx - 1, gy - 1)` shadow bit, pruning shadow reads when `glyph >= 0.5` and reusing the foreground texel when both land in the same 32-bit texel. |
+| `UniTextShouldFlipHorizontal` | `bool UniTextShouldFlipHorizontal(float3 worldPivot, float3 worldRight, float3 worldUp, float autoFlipMode, float vrcMirrorMode, float vrcFaceMirrorMode)` | Evaluates view-space orientation and camera handedness (`UNITY_MATRIX_V`) in `vert` to determine whether `uv.x` should be flipped (`1.0 - uv.x`) so text stays forward-reading in mirrors and from behind the panel (`0 = Off`, `1 = Mirror Only`, `2 = Auto`). |
 
 ---
 
@@ -60,6 +61,8 @@ Include `Packages/dev.dreaminko.unitext/Shaders/UniTextCommon.cginc` in your cus
    ```
 4. **Preserve UV Orientation, Dynamic Viewport Aspect & Ring-Buffer Row Mapping**:
    Standard Unity Quad UVs run `u: 0 → 1` (left-to-right) and `v: 0 → 1` (bottom-to-top). Convert `v` to top-down row index using `float topV = 1.0 - uv.y;` before computing `cellRow = floor(topV * activeRows)` (`4..12`, default `6`). Compute physical panel aspect in `vert` from `unity_ObjectToWorld` column lengths (`scale.x / scale.y`) (after applying live resize scale from `UniTextSampleGeometry` when `_LiveGeometry > 0.5`) and cache `UniTextSampleTopRow` + `UniTextSampleStatus` in `nointerpolation` vertex outputs so `frag` avoids duplicate buffer reads. Map `uint physRow = (cellRow + topRow) % activeRows;` and call `UniTextSampleRowStyle(..., rowMaxPx)` before binary-searching `UniTextSampleLayout` (skipping the binary search whenever `penX >= rowMaxPx`), and prefer `UniTextSampleGlyphAndShadow` when rendering a 1-pixel shadow.
+5. **Mirror & Backface Auto-Flip (`_AutoFlip`)**:
+   To keep double-sided (`Cull Off`) text readable in mirrors and when viewed from behind, declare `[Enum(Off, 0, Mirror Only, 1, Mirror and Backface, 2)] _AutoFlip ("Auto Flip Text", Float) = 2` (and `float _VRChatMirrorMode; float _VRChatFaceMirrorMode;`), then call `UniTextShouldFlipHorizontal(worldPivot, worldRight, worldUp, _AutoFlip, _VRChatMirrorMode, _VRChatFaceMirrorMode)` once per vertex in `vert` and set `o.uv = float2(flipX ? (1.0 - v.uv.x) : v.uv.x, v.uv.y);`. Evaluating at the panel center `worldPivot` keeps all 4 quad vertices consistent.
 
 ---
 
@@ -71,7 +74,7 @@ Include `Packages/dev.dreaminko.unitext/Shaders/UniTextCommon.cginc` in your cus
    - `SideFollowAnchor` and `BoardPivot` (keep `BoardPivot` active in Edit Mode for scene preview; NDMF hides it at build time until `UniText_Visible` is toggled on)
    - `ParamBridge` (the `8×1` orthographic camera + `EncoderQuad` that feeds `Buffer_64x32_<Tier>`)
 3. If your skin adds extra meshes (frame, bezel, stand), attach them under `BoardPivot` so they automatically follow `UniText_Visible`, `UniText_Scale`, and `UniText_WorldDrop`. Keep total triangle count low and prefer 1–2 material slots to preserve Avatar Performance Rank.
-4. Optionally customize `followBone`, `boneOffset`, `viewportWidth`, `viewportHeight`, `displayRows` (`4..12`), `menuName`, `installTargetMenu`, `syncWorldDrop`, or `syncWideRows` directly in the `UniTextProp` Inspector without unpacking or modifying shared package assets.
+4. Optionally customize `followBone`, `boneOffset`, `viewportWidth`, `viewportHeight`, `displayRows` (`4..12`), `menuName`, `installTargetMenu`, `syncWorldDrop`, `syncBillboard`, or `syncWideRows` directly in the `UniTextProp` Inspector without unpacking or modifying shared package assets.
 5. If your avatar's synced parameter budget is tight even at `Lite (33b)`, consider enabling **VRCFury Parameter Compressor** on your avatar's own static menu toggles/sliders (do not compress UniText's real-time OSC parameters `UniText_Ctrl` / `UniText_D*`).
 
 ---

@@ -322,4 +322,59 @@ inline void UniTextSampleGlyphAndShadow(
     }
 }
 
+// Determines whether horizontal UV (u: 0 -> 1) runs right-to-left on the viewer's screen
+// (e.g., inside a VRChat mirror reflection, custom reflection camera, or when viewing the panel's back face).
+//   autoFlipMode: 0 = Off, 1 = Mirror Only, 2 = Auto (Mirror + Backface)
+inline bool UniTextShouldFlipHorizontal(
+    float3 worldPivot,
+    float3 worldRight,
+    float3 worldUp,
+    float autoFlipMode,
+    float vrcMirrorMode,
+    float vrcFaceMirrorMode)
+{
+    if (autoFlipMode < 0.5)
+    {
+        return false;
+    }
+
+    float3x3 viewRot = (float3x3)UNITY_MATRIX_V;
+    float3 viewRight = mul(viewRot, worldRight);
+    float3 viewUp = mul(viewRot, worldUp);
+    float3 viewPos = mul(UNITY_MATRIX_V, float4(worldPivot, 1.0)).xyz;
+    float3 toCamView = (unity_OrthoParams.w > 0.5) ? float3(0.0, 0.0, 1.0) : -viewPos;
+    float viewOrient = dot(cross(viewRight, viewUp), toCamView);
+
+    // Normal Unity cameras have det(UNITY_MATRIX_V) = -1 (LH world -> RH view);
+    // reflected mirror cameras invert handedness once more, yielding det(UNITY_MATRIX_V) = +1.
+    float detV = determinant(viewRot);
+    bool isMirrorCam = (vrcMirrorMode > 0.5) || (detV > 0.0);
+
+    // Face Mirror may either use a reflected view matrix (detV > 0, already reflected in viewOrient)
+    // or a regular camera (detV <= 0) whose HUD texture is flipped horizontally in UI compositing.
+    bool isUiFlippedFaceMirror = (vrcFaceMirrorMode > 0.5) && (detV <= 0.0);
+
+    bool flipX;
+    if (autoFlipMode < 1.5)
+    {
+        // Mode 1: Mirror Only — fix reversed text in mirrors without double-flipping a back-facing panel in a mirror.
+        flipX = isMirrorCam && (viewOrient < 0.0);
+        if (isUiFlippedFaceMirror && (viewOrient >= 0.0))
+        {
+            flipX = true;
+        }
+    }
+    else
+    {
+        // Mode 2: Auto (Mirror + Backface) — always keep text forward-reading on screen.
+        flipX = (viewOrient < 0.0);
+        if (isUiFlippedFaceMirror)
+        {
+            flipX = !flipX;
+        }
+    }
+
+    return flipX;
+}
+
 #endif // UNITEXT_COMMON_INCLUDED

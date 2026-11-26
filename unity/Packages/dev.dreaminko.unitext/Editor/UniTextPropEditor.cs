@@ -147,6 +147,7 @@ namespace UniText.Editor
                             prop.menuName,
                             prop.installTargetMenu,
                             prop.syncWorldDrop,
+                            prop.syncBillboard,
                             prop.allowRuntimeResize,
                             recordUndo: true
                         );
@@ -169,6 +170,7 @@ namespace UniText.Editor
             string prevMenuName = prop.menuName;
             VRCExpressionsMenu prevTargetMenu = prop.installTargetMenu;
             bool prevSyncWorldDrop = prop.syncWorldDrop;
+            bool prevSyncBillboard = prop.syncBillboard;
             bool prevAllowRuntimeResize = prop.allowRuntimeResize;
 
             serializedObject.Update();
@@ -206,6 +208,7 @@ namespace UniText.Editor
                     bool menuNameChanged = !string.Equals(prevMenuName ?? string.Empty, prop.menuName ?? string.Empty, System.StringComparison.Ordinal);
                     bool targetMenuChanged = prop.installTargetMenu != prevTargetMenu;
                     bool syncWorldDropChanged = prop.syncWorldDrop != prevSyncWorldDrop;
+                    bool syncBillboardChanged = prop.syncBillboard != prevSyncBillboard;
                     bool allowResizeChanged = prop.allowRuntimeResize != prevAllowRuntimeResize;
 
                     if (installMenuChanged)
@@ -217,12 +220,13 @@ namespace UniText.Editor
                             prop.menuName,
                             prop.installTargetMenu,
                             prop.syncWorldDrop,
+                            prop.syncBillboard,
                             prop.allowRuntimeResize,
                             recordUndo: true
                         );
                         EditorSceneManager.MarkSceneDirty(prop.gameObject.scene);
                     }
-                    else if (menuNameChanged || targetMenuChanged || syncWorldDropChanged || allowResizeChanged)
+                    else if (menuNameChanged || targetMenuChanged || syncWorldDropChanged || syncBillboardChanged || allowResizeChanged)
                     {
                         GameObject activeMenuRoot = propMenuRoot != null ? propMenuRoot : externalMenuRoot;
                         if (activeMenuRoot != null)
@@ -234,16 +238,18 @@ namespace UniText.Editor
                                 updateMenuName: menuNameChanged,
                                 updateTargetMenu: targetMenuChanged,
                                 syncWorldDrop: prop.syncWorldDrop,
+                                syncBillboard: prop.syncBillboard,
                                 allowRuntimeResize: prop.allowRuntimeResize,
                                 recordUndo: true
                             );
                             EditorSceneManager.MarkSceneDirty(prop.gameObject.scene);
                         }
-                        else if (hasLooseAvatarMenu && (syncWorldDropChanged || allowResizeChanged) && avatarRoot != null)
+                        else if (hasLooseAvatarMenu && (syncWorldDropChanged || syncBillboardChanged || allowResizeChanged) && avatarRoot != null)
                         {
                             UniTextMenuUtility.SyncLooseMenuItems(
                                 avatarRoot,
                                 prop.syncWorldDrop,
+                                prop.syncBillboard,
                                 prop.allowRuntimeResize,
                                 recordUndo: true
                             );

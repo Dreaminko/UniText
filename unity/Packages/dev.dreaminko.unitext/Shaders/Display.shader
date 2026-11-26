@@ -16,7 +16,9 @@ Shader "UniText/Display"
         [Toggle] _LiveGeometry ("Follow Sender Geometry (CMD_SET_GEOMETRY)", Float) = 0
         [Toggle] _KeepGlyphAspect ("Preserve Glyph Aspect", Float) = 1
         [Toggle] _Billboard ("Stereo Billboard", Float) = 0
+        [Enum(Off, 0, Mirror Only, 1, Mirror and Backface, 2)] _AutoFlip ("Auto Flip Text", Float) = 2
         _AnchorOffset ("Anchor Offset (XY)", Vector) = (0, 0, 0, 0)
+        _ViewFilter ("View Filter (0=All, 1=Mirror/Cam Only, 2=Main Cam Only)", Float) = 0
     }
     SubShader
     {
@@ -25,6 +27,7 @@ Shader "UniText/Display"
             "Queue"="Transparent"
             "RenderType"="Transparent"
             "IgnoreProjector"="True"
+            "DisableBatching"="True"
             "VRCFallback"="Hidden"
         }
         Cull Off
@@ -54,7 +57,12 @@ Shader "UniText/Display"
             float _LiveGeometry;
             float _KeepGlyphAspect;
             float _Billboard;
+            float _AutoFlip;
             float4 _AnchorOffset;
+            float _ViewFilter;
+            float _VRChatMirrorMode;
+            float _VRChatCameraMode;
+            float _VRChatFaceMirrorMode;
 
             struct appdata
             {
@@ -101,6 +109,14 @@ Shader "UniText/Display"
                 UNITY_INITIALIZE_OUTPUT(v2f, o);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
 
+                bool isMirrorOrCam = (_VRChatMirrorMode > 0.5) || (_VRChatCameraMode > 0.5) || (_VRChatFaceMirrorMode > 0.5);
+                if ((_ViewFilter > 0.5 && _ViewFilter < 1.5 && !isMirrorOrCam) ||
+                    (_ViewFilter > 1.5 && isMirrorOrCam))
+                {
+                    o.pos = float4(0.0, 0.0, 2.0, 1.0);
+                    return o;
+                }
+
                 float3 baseScale = float3(
                     length(float3(unity_ObjectToWorld[0][0], unity_ObjectToWorld[1][0], unity_ObjectToWorld[2][0])),
                     length(float3(unity_ObjectToWorld[0][1], unity_ObjectToWorld[1][1], unity_ObjectToWorld[2][1])),
@@ -121,13 +137,16 @@ Shader "UniText/Display"
                 o.geo = float4(geo.x, geo.y, (float)topRow, (float)status);
                 o.panelAspect = scale.x / max(scale.y, 1e-4);
 
+                float2 liveCenterLocal = anchor * (1.0 - liveScale);
+                float3 worldPivot = mul(unity_ObjectToWorld, float4(liveCenterLocal, 0.0, 1.0)).xyz;
+                float3 worldRight;
+                float3 worldUp;
+
                 if (_Billboard > 0.5)
                 {
-                    float2 liveCenterLocal = anchor * (1.0 - liveScale);
-                    float3 worldPivot = mul(unity_ObjectToWorld, float4(liveCenterLocal, 0.0, 1.0)).xyz;
-
-                    float3 camPos = UniTextGetStereoCenterCamPos();
-                    float3 forward = normalize(camPos - worldPivot);
+                    float3 toCam = UniTextGetStereoCenterCamPos() - worldPivot;
+                    float distSq = dot(toCam, toCam);
+                    float3 forward = (distSq > 1e-8) ? (toCam * rsqrt(distSq)) : float3(0.0, 0.0, 1.0);
                     float3 upRef = (abs(forward.y) > 0.995) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
                     float3 right = normalize(cross(forward, upRef));
                     float3 up = cross(right, forward);
@@ -138,13 +157,25 @@ Shader "UniText/Display"
                         - forward * (v.vertex.z * scale.z);
 
                     o.pos = UnityWorldToClipPos(worldPos);
+                    worldRight = right;
+                    worldUp = up;
                 }
                 else
                 {
                     o.pos = UnityObjectToClipPos(vtx);
+                    worldRight = mul((float3x3)unity_ObjectToWorld, float3(1.0, 0.0, 0.0));
+                    worldUp = mul((float3x3)unity_ObjectToWorld, float3(0.0, 1.0, 0.0));
                 }
 
-                o.uv = v.uv;
+                bool flipX = UniTextShouldFlipHorizontal(
+                    worldPivot,
+                    worldRight,
+                    worldUp,
+                    _AutoFlip,
+                    _VRChatMirrorMode,
+                    _VRChatFaceMirrorMode
+                );
+                o.uv = float2(flipX ? (1.0 - v.uv.x) : v.uv.x, v.uv.y);
                 return o;
             }
 
