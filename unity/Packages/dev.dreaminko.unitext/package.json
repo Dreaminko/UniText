@@ -1,7 +1,7 @@
 {
   "name": "dev.dreaminko.unitext",
   "displayName": "UniText",
-  "version": "1.2.3",
+  "version": "1.2.5",
   "unity": "2022.3",
   "description": "Native Unicode BMP (CJK / Multilingual) OSC shared subtitle prop and open protocol for VRChat Avatar 3.0.",
   "author": {
@@ -12,7 +12,7 @@
   "licensesUrl": "https://github.com/Dreaminko/UniText/blob/main/LICENSE",
   "documentationUrl": "https://github.com/Dreaminko/UniText/blob/main/docs/PROTOCOL.md",
   "changelogUrl": "https://github.com/Dreaminko/UniText/releases",
-  "url": "https://github.com/Dreaminko/UniText/releases/download/1.2.3/dev.dreaminko.unitext-1.2.3.zip",
+  "url": "https://github.com/Dreaminko/UniText/releases/download/1.2.5/dev.dreaminko.unitext-1.2.5.zip",
   "zipSHA256": "",
   "vpmDependencies": {
     "com.vrchat.avatars": ">=3.7.0",
