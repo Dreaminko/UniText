@@ -333,7 +333,6 @@ namespace UniText.Editor
                 dispMat,
                 displayRows,
                 rowPx,
-                selfViewHeadDefault,
                 out UniTextPlacementUtility.SelfViewMetrics selfViewMetrics
             );
 
@@ -394,7 +393,6 @@ namespace UniText.Editor
             Material dispMat,
             int displayRows,
             int rowPx,
-            bool defaultFollowHead,
             out UniTextPlacementUtility.SelfViewMetrics metrics)
         {
             metrics = UniTextPlacementUtility.ComputeSelfViewMetrics(ctx.AvatarRootObject);
@@ -412,6 +410,10 @@ namespace UniText.Editor
             var headAnchor = new GameObject("SelfViewHeadAnchor");
             headAnchor.transform.SetParent(root.transform, false);
             headAnchor.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
+            if (metrics.HeadBone == null)
+            {
+                Debug.LogWarning($"[UniText] Humanoid Head bone not found on '{ctx.AvatarRootObject.name}'; Self View Follow Head will fall back to the body bone.", root);
+            }
             Transform headTarget = metrics.HeadBone != null ? metrics.HeadBone : metrics.BodyBone;
             if (headTarget != null)
             {
@@ -422,11 +424,32 @@ namespace UniText.Editor
 
             var rig = new GameObject("SelfViewRig");
             rig.transform.SetParent(root.transform, false);
-            rig.SetActive(false);
+            rig.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
+
+            if (root.transform.parent != ctx.AvatarRootObject.transform ||
+                root.GetComponent<ModularAvatarBoneProxy>() != null ||
+                Quaternion.Angle(root.transform.rotation, ctx.AvatarRootObject.transform.rotation) > 0.1f)
+            {
+                // Keep SelfViewRig aligned to avatar root upright space even if the prefab was placed under a tilted bone (e.g. Chest).
+                var rigConstraint = rig.AddComponent<VRCParentConstraint>();
+                rigConstraint.SetSources(new[] { new VRCConstraintSource(ctx.AvatarRootObject.transform, 1f) });
+                rigConstraint.GlobalWeight = 1f;
+                rigConstraint.IsActive = true;
+                rigConstraint.Locked = true;
+                rigConstraint.FreezeToWorld = false;
+                rigConstraint.AffectsPositionX = false;
+                rigConstraint.AffectsPositionY = false;
+                rigConstraint.AffectsPositionZ = false;
+                rigConstraint.AffectsRotationX = true;
+                rigConstraint.AffectsRotationY = true;
+                rigConstraint.AffectsRotationZ = true;
+                rigConstraint.ApplyConfigurationChanges();
+            }
 
             var bodyPivot = new GameObject("BodyPivot");
             bodyPivot.transform.SetParent(rig.transform, false);
-            bodyPivot.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
+            bodyPivot.transform.localPosition = Vector3.zero;
+            bodyPivot.transform.localRotation = Quaternion.identity;
             var bodyConstraint = bodyPivot.AddComponent<VRCParentConstraint>();
             bodyConstraint.SetSources(new[] { new VRCConstraintSource(bodyAnchor.transform, 1f) });
             bodyConstraint.GlobalWeight = 1f;
@@ -443,7 +466,8 @@ namespace UniText.Editor
 
             var headPivot = new GameObject("HeadPivot");
             headPivot.transform.SetParent(rig.transform, false);
-            headPivot.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
+            headPivot.transform.localPosition = Vector3.zero;
+            headPivot.transform.localRotation = Quaternion.identity;
             var headConstraint = headPivot.AddComponent<VRCParentConstraint>();
             headConstraint.SetSources(new[] { new VRCConstraintSource(headAnchor.transform, 1f) });
             headConstraint.GlobalWeight = 1f;
@@ -458,29 +482,44 @@ namespace UniText.Editor
             headConstraint.AffectsRotationZ = false;
             headConstraint.ApplyConfigurationChanges();
 
-            var boardHolder = new GameObject("BoardHolder");
-            boardHolder.transform.SetParent(rig.transform, false);
-            boardHolder.transform.SetPositionAndRotation(metrics.AnchorWorldPos, metrics.AnchorWorldRot);
-            var holderConstraint = boardHolder.AddComponent<VRCParentConstraint>();
-            holderConstraint.SetSources(new[]
+            Material selfViewMat = null;
+            if (dispMat != null)
             {
-                new VRCConstraintSource(bodyPivot.transform, defaultFollowHead ? 0f : 1f),
-                new VRCConstraintSource(headPivot.transform, defaultFollowHead ? 1f : 0f)
-            });
-            holderConstraint.GlobalWeight = 1f;
-            holderConstraint.IsActive = true;
-            holderConstraint.Locked = true;
-            holderConstraint.FreezeToWorld = false;
-            holderConstraint.AffectsPositionX = true;
-            holderConstraint.AffectsPositionY = true;
-            holderConstraint.AffectsPositionZ = true;
-            holderConstraint.AffectsRotationX = true;
-            holderConstraint.AffectsRotationY = true;
-            holderConstraint.AffectsRotationZ = true;
-            holderConstraint.ApplyConfigurationChanges();
+                selfViewMat = new Material(dispMat) { name = $"{dispMat.name}_{root.name}_SelfView" };
+                selfViewMat.SetFloat("_DisplayRows", displayRows);
+                selfViewMat.SetFloat("_RowPx", rowPx);
+                selfViewMat.SetFloat("_LiveGeometry", prop.allowRuntimeResize ? 1f : 0f);
+                selfViewMat.SetVector("_AnchorOffset", Vector4.zero);
+                selfViewMat.SetFloat("_ViewFilter", 2f);
+                ctx.AssetSaver.SaveAsset(selfViewMat);
+            }
 
+            (Transform bodyQuadTf, MeshFilter bodyMeshFilter) = CreateSelfViewBranch(
+                bodyPivot.transform, metrics, displayQuad.localScale, baseQuadMesh, selfViewMat
+            );
+            (_, MeshFilter headMeshFilter) = CreateSelfViewBranch(
+                headPivot.transform, metrics, displayQuad.localScale, baseQuadMesh, selfViewMat
+            );
+
+            ApplyExpandedBillboardBounds(ctx, prop, bodyQuadTf, displayRows, rowPx, UniTextBoardAnchor.Center);
+            if (bodyMeshFilter != null && headMeshFilter != null)
+            {
+                headMeshFilter.sharedMesh = bodyMeshFilter.sharedMesh;
+            }
+
+            bodyPivot.SetActive(false);
+            headPivot.SetActive(false);
+        }
+
+        private static (Transform quadTf, MeshFilter meshFilter) CreateSelfViewBranch(
+            Transform parentPivot,
+            UniTextPlacementUtility.SelfViewMetrics metrics,
+            Vector3 quadLocalScale,
+            Mesh baseQuadMesh,
+            Material selfViewMat)
+        {
             var offsetHeight = new GameObject("OffsetHeight");
-            offsetHeight.transform.SetParent(boardHolder.transform, false);
+            offsetHeight.transform.SetParent(parentPivot, false);
             offsetHeight.transform.localPosition = new Vector3(0f, 0.5f * (metrics.HeightMin + metrics.HeightMax), 0f);
 
             var offsetDist = new GameObject("OffsetDist");
@@ -492,7 +531,7 @@ namespace UniText.Editor
             selfViewQuadGo.transform.SetParent(offsetDist.transform, false);
             selfViewQuadGo.transform.localPosition = Vector3.zero;
             selfViewQuadGo.transform.localRotation = Quaternion.identity;
-            selfViewQuadGo.transform.localScale = displayQuad.localScale;
+            selfViewQuadGo.transform.localScale = quadLocalScale;
 
             var meshFilter = selfViewQuadGo.AddComponent<MeshFilter>();
             meshFilter.sharedMesh = baseQuadMesh;
@@ -502,20 +541,12 @@ namespace UniText.Editor
             meshRenderer.receiveShadows = false;
             meshRenderer.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.Off;
             meshRenderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
-
-            if (dispMat != null)
+            if (selfViewMat != null)
             {
-                var selfViewMat = new Material(dispMat) { name = $"{dispMat.name}_{root.name}_SelfView" };
-                selfViewMat.SetFloat("_DisplayRows", displayRows);
-                selfViewMat.SetFloat("_RowPx", rowPx);
-                selfViewMat.SetFloat("_LiveGeometry", prop.allowRuntimeResize ? 1f : 0f);
-                selfViewMat.SetVector("_AnchorOffset", Vector4.zero);
-                selfViewMat.SetFloat("_ViewFilter", 2f);
-                ctx.AssetSaver.SaveAsset(selfViewMat);
                 meshRenderer.sharedMaterial = selfViewMat;
             }
 
-            ApplyExpandedBillboardBounds(ctx, prop, selfViewQuadGo.transform, displayRows, rowPx, UniTextBoardAnchor.Center);
+            return (selfViewQuadGo.transform, meshFilter);
         }
 
         private static void ApplyExpandedBillboardBounds(

@@ -1514,10 +1514,25 @@ def test_unity_package_integrity() -> None:
         "UniText_SelfViewHeight",
         "UniText_SelfViewScale",
         "SelfViewRig",
-        "Sources.source0.Weight",
+        "SelfViewRig/BodyPivot",
+        "SelfViewRig/HeadPivot",
+        "On_Body",
+        "On_Head",
+        "CreateSelfViewStateClip",
     ):
         assert tok in builder_src, f"UniTextAssetBuilder.cs missing '{tok}'"
-    for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "UniText_ParamCamera", "BuildConstantLayer", "TwoAxisPuppet", "CreateMenuHierarchyInMemory"):
+    for legacy_tok in (
+        "UniText_V11",
+        "UniText_V12",
+        "UniText_V13",
+        "UniText_ParamCamera",
+        "BuildConstantLayer",
+        "TwoAxisPuppet",
+        "CreateMenuHierarchyInMemory",
+        "Sources.source0.Weight",
+        "Sources.source1.Weight",
+        "CreateDualSourceWeightClip",
+    ):
         assert legacy_tok not in builder_src, f"UniTextAssetBuilder.cs still contains legacy '{legacy_tok}'"
 
     menu_util_src = (PKG_DIR / "Editor" / "UniTextMenuUtility.cs").read_text(encoding="utf-8")
@@ -1674,13 +1689,15 @@ def test_unity_package_integrity() -> None:
         "ApplyExpandedBillboardBounds",
         "_UniTextBounds",
         "SelfViewRig",
+        "BodyPivot",
+        "HeadPivot",
         "SelfViewBodyAnchor",
         "SelfViewHeadAnchor",
         "ParamSelfView",
         "EnsureSelfViewSubMenu",
     ]:
         assert req_token in ndmf_src, f"UniTextNdmfPlugin.cs missing '{req_token}'"
-    for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "CreateMenuHierarchyInMemory"):
+    for legacy_tok in ("UniText_V11", "UniText_V12", "UniText_V13", "CreateMenuHierarchyInMemory", "BoardHolder"):
         assert legacy_tok not in ndmf_src, f"UniTextNdmfPlugin.cs still contains legacy '{legacy_tok}'"
 
     placement_src = (PKG_DIR / "Editor" / "UniTextPlacementUtility.cs").read_text(encoding="utf-8")

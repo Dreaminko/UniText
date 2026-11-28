@@ -186,19 +186,8 @@ namespace UniText.Editor
                 defaultWorldDrop
             );
 
-            // Layer 3: Local-only Self View rig + main DisplayQuad mirror/camera view filter
+            // Layer 3: Local-only Self View rig (Off / On_Body / On_Head) + main DisplayQuad mirror/camera view filter
             BuildSelfViewLayer(controller, saveAsset);
-
-            // Layer 4: Self View follow mode (Body vs Head)
-            BuildBoolLayer(
-                controller,
-                "UniText_SelfViewFollow",
-                "UniText_SelfViewHead",
-                CreateDualSourceWeightClip("SelfView_Body", "SelfViewRig/BoardHolder", constraintType, 1f, 0f, saveAsset),
-                CreateDualSourceWeightClip("SelfView_Head", "SelfViewRig/BoardHolder", constraintType, 0f, 1f, saveAsset),
-                saveAsset,
-                defaultSelfViewHead
-            );
 
             return controller;
         }
@@ -552,27 +541,41 @@ namespace UniText.Editor
                 new Vector3(0.5f, 0.5f, 0.5f), new Vector3(1.5f, 1.5f, 1.5f), saveAsset
             ));
 
-            const string selfViewQuadPath = "SelfViewRig/BoardHolder/OffsetHeight/OffsetDist/DisplayQuad";
+            string[] selfViewQuadPaths =
+            {
+                "SelfViewRig/BodyPivot/OffsetHeight/OffsetDist/DisplayQuad",
+                "SelfViewRig/HeadPivot/OffsetHeight/OffsetDist/DisplayQuad",
+            };
+            string[] selfViewHeightPaths =
+            {
+                "SelfViewRig/BodyPivot/OffsetHeight",
+                "SelfViewRig/HeadPivot/OffsetHeight",
+            };
+            string[] selfViewDistScalePaths =
+            {
+                "SelfViewRig/BodyPivot/OffsetHeight/OffsetDist",
+                "SelfViewRig/HeadPivot/OffsetHeight/OffsetDist",
+            };
             directChildren.Add(Build1DRangeChild(
                 "SelfViewBillboard", "UniText_Billboard",
-                selfViewQuadPath, "material._Billboard",
+                selfViewQuadPaths, "material._Billboard",
                 0f, 1f, 0f, 1f, saveAsset
             ));
             directChildren.Add(Build1DRangeChild(
                 "SelfViewOpacity", "UniText_Opacity",
-                selfViewQuadPath, "material._Opacity",
+                selfViewQuadPaths, "material._Opacity",
                 0f, 1f, 0.12f, 1.0f, saveAsset
             ));
             directChildren.Add(Build1DPositionChild(
-                "SelfViewHeight", "UniText_SelfViewHeight", "SelfViewRig/BoardHolder/OffsetHeight",
+                "SelfViewHeight", "UniText_SelfViewHeight", selfViewHeightPaths,
                 new Vector3(0f, selfViewHeightMin, 0f), new Vector3(0f, selfViewHeightMax, 0f), saveAsset
             ));
             directChildren.Add(Build1DPositionChild(
-                "SelfViewDist", "UniText_SelfViewDist", "SelfViewRig/BoardHolder/OffsetHeight/OffsetDist",
+                "SelfViewDist", "UniText_SelfViewDist", selfViewDistScalePaths,
                 new Vector3(0f, 0f, selfViewDistMin), new Vector3(0f, 0f, selfViewDistMax), saveAsset
             ));
             directChildren.Add(Build1DScaleChild(
-                "SelfViewScale", "UniText_SelfViewScale", "SelfViewRig/BoardHolder/OffsetHeight/OffsetDist",
+                "SelfViewScale", "UniText_SelfViewScale", selfViewDistScalePaths,
                 new Vector3(0.30f, 0.30f, 0.30f), new Vector3(1.00f, 1.00f, 1.00f), saveAsset
             ));
             // Live resize (rows / row_px + panel size) is driven by CMD_SET_GEOMETRY inside Display.shader, not by Animator curves.
@@ -606,6 +609,20 @@ namespace UniText.Editor
             float valMax,
             Action<UnityEngine.Object> saveAsset)
         {
+            return Build1DRangeChild(id, paramName, new[] { targetPath }, propertyName, paramMin, paramMax, valMin, valMax, saveAsset);
+        }
+
+        private static ChildMotion Build1DRangeChild(
+            string id,
+            string paramName,
+            string[] targetPaths,
+            string propertyName,
+            float paramMin,
+            float paramMax,
+            float valMin,
+            float valMax,
+            Action<UnityEngine.Object> saveAsset)
+        {
             var subTree = new BlendTree
             {
                 name = $"BT_{id}",
@@ -615,8 +632,8 @@ namespace UniText.Editor
             };
             saveAsset?.Invoke(subTree);
 
-            var clipMin = CreateSingleValueClip($"{id}_Min", targetPath, typeof(MeshRenderer), propertyName, valMin, saveAsset);
-            var clipMax = CreateSingleValueClip($"{id}_Max", targetPath, typeof(MeshRenderer), propertyName, valMax, saveAsset);
+            var clipMin = CreateSingleValueClip($"{id}_Min", targetPaths, typeof(MeshRenderer), propertyName, valMin, saveAsset);
+            var clipMax = CreateSingleValueClip($"{id}_Max", targetPaths, typeof(MeshRenderer), propertyName, valMax, saveAsset);
 
             subTree.AddChild(clipMin, paramMin);
             subTree.AddChild(clipMax, paramMax);
@@ -637,6 +654,17 @@ namespace UniText.Editor
             Vector3 scaleMax,
             Action<UnityEngine.Object> saveAsset)
         {
+            return Build1DScaleChild(id, paramName, new[] { targetPath }, scaleMin, scaleMax, saveAsset);
+        }
+
+        private static ChildMotion Build1DScaleChild(
+            string id,
+            string paramName,
+            string[] targetPaths,
+            Vector3 scaleMin,
+            Vector3 scaleMax,
+            Action<UnityEngine.Object> saveAsset)
+        {
             var subTree = new BlendTree
             {
                 name = $"BT_{id}",
@@ -646,8 +674,8 @@ namespace UniText.Editor
             };
             saveAsset?.Invoke(subTree);
 
-            var clipMin = CreateVector3Clip($"{id}_Min", targetPath, "m_LocalScale", scaleMin, saveAsset);
-            var clipMax = CreateVector3Clip($"{id}_Max", targetPath, "m_LocalScale", scaleMax, saveAsset);
+            var clipMin = CreateVector3Clip($"{id}_Min", targetPaths, "m_LocalScale", scaleMin, saveAsset);
+            var clipMax = CreateVector3Clip($"{id}_Max", targetPaths, "m_LocalScale", scaleMax, saveAsset);
 
             subTree.AddChild(clipMin, 0f);
             subTree.AddChild(clipMax, 1f);
@@ -663,7 +691,7 @@ namespace UniText.Editor
         private static ChildMotion Build1DPositionChild(
             string id,
             string paramName,
-            string targetPath,
+            string[] targetPaths,
             Vector3 posMin,
             Vector3 posMax,
             Action<UnityEngine.Object> saveAsset)
@@ -677,8 +705,8 @@ namespace UniText.Editor
             };
             saveAsset?.Invoke(subTree);
 
-            var clipMin = CreateVector3Clip($"{id}_Min", targetPath, "m_LocalPosition", posMin, saveAsset);
-            var clipMax = CreateVector3Clip($"{id}_Max", targetPath, "m_LocalPosition", posMax, saveAsset);
+            var clipMin = CreateVector3Clip($"{id}_Min", targetPaths, "m_LocalPosition", posMin, saveAsset);
+            var clipMax = CreateVector3Clip($"{id}_Max", targetPaths, "m_LocalPosition", posMax, saveAsset);
 
             subTree.AddChild(clipMin, 0f);
             subTree.AddChild(clipMax, 1f);
@@ -707,32 +735,62 @@ namespace UniText.Editor
             controller.AddLayer(layer);
 
             var offState = sm.AddState("Off");
-            offState.motion = CreateSelfViewClip("SelfView_Off", false, saveAsset);
+            offState.motion = CreateSelfViewStateClip("SelfView_Off", false, false, false, saveAsset);
             offState.writeDefaultValues = false;
             saveAsset?.Invoke(offState);
 
-            var onState = sm.AddState("On");
-            onState.motion = CreateSelfViewClip("SelfView_On", true, saveAsset);
-            onState.writeDefaultValues = false;
-            saveAsset?.Invoke(onState);
+            var onBodyState = sm.AddState("On_Body");
+            onBodyState.motion = CreateSelfViewStateClip("SelfView_Body", true, false, true, saveAsset);
+            onBodyState.writeDefaultValues = false;
+            saveAsset?.Invoke(onBodyState);
+
+            var onHeadState = sm.AddState("On_Head");
+            onHeadState.motion = CreateSelfViewStateClip("SelfView_Head", false, true, true, saveAsset);
+            onHeadState.writeDefaultValues = false;
+            saveAsset?.Invoke(onHeadState);
 
             sm.defaultState = offState;
 
-            var toOn = offState.AddTransition(onState);
-            toOn.hasExitTime = false;
-            toOn.duration = 0f;
-            toOn.AddCondition(AnimatorConditionMode.If, 0f, "IsLocal");
-            toOn.AddCondition(AnimatorConditionMode.If, 0f, "UniText_Visible");
-            toOn.AddCondition(AnimatorConditionMode.If, 0f, "UniText_SelfView");
-            saveAsset?.Invoke(toOn);
+            var toBody = offState.AddTransition(onBodyState);
+            toBody.hasExitTime = false;
+            toBody.duration = 0f;
+            toBody.AddCondition(AnimatorConditionMode.If, 0f, "IsLocal");
+            toBody.AddCondition(AnimatorConditionMode.If, 0f, "UniText_Visible");
+            toBody.AddCondition(AnimatorConditionMode.If, 0f, "UniText_SelfView");
+            toBody.AddCondition(AnimatorConditionMode.IfNot, 0f, "UniText_SelfViewHead");
+            saveAsset?.Invoke(toBody);
 
-            foreach (string guardParam in new[] { "IsLocal", "UniText_Visible", "UniText_SelfView" })
+            var toHead = offState.AddTransition(onHeadState);
+            toHead.hasExitTime = false;
+            toHead.duration = 0f;
+            toHead.AddCondition(AnimatorConditionMode.If, 0f, "IsLocal");
+            toHead.AddCondition(AnimatorConditionMode.If, 0f, "UniText_Visible");
+            toHead.AddCondition(AnimatorConditionMode.If, 0f, "UniText_SelfView");
+            toHead.AddCondition(AnimatorConditionMode.If, 0f, "UniText_SelfViewHead");
+            saveAsset?.Invoke(toHead);
+
+            var bodyToHead = onBodyState.AddTransition(onHeadState);
+            bodyToHead.hasExitTime = false;
+            bodyToHead.duration = 0f;
+            bodyToHead.AddCondition(AnimatorConditionMode.If, 0f, "UniText_SelfViewHead");
+            saveAsset?.Invoke(bodyToHead);
+
+            var headToBody = onHeadState.AddTransition(onBodyState);
+            headToBody.hasExitTime = false;
+            headToBody.duration = 0f;
+            headToBody.AddCondition(AnimatorConditionMode.IfNot, 0f, "UniText_SelfViewHead");
+            saveAsset?.Invoke(headToBody);
+
+            foreach (var activeState in new[] { onBodyState, onHeadState })
             {
-                var toOff = onState.AddTransition(offState);
-                toOff.hasExitTime = false;
-                toOff.duration = 0f;
-                toOff.AddCondition(AnimatorConditionMode.IfNot, 0f, guardParam);
-                saveAsset?.Invoke(toOff);
+                foreach (string guardParam in new[] { "IsLocal", "UniText_Visible", "UniText_SelfView" })
+                {
+                    var toOff = activeState.AddTransition(offState);
+                    toOff.hasExitTime = false;
+                    toOff.duration = 0f;
+                    toOff.AddCondition(AnimatorConditionMode.IfNot, 0f, guardParam);
+                    saveAsset?.Invoke(toOff);
+                }
             }
         }
 
@@ -803,55 +861,61 @@ namespace UniText.Editor
             float value,
             Action<UnityEngine.Object> saveAsset)
         {
+            return CreateSingleValueClip(clipName, new[] { relativePath }, targetType, propertyName, value, saveAsset);
+        }
+
+        private static AnimationClip CreateSingleValueClip(
+            string clipName,
+            string[] relativePaths,
+            Type targetType,
+            string propertyName,
+            float value,
+            Action<UnityEngine.Object> saveAsset)
+        {
             var clip = new AnimationClip { name = clipName };
-            var curve = AnimationCurve.Linear(0f, value, 1f / 60f, value);
-            clip.SetCurve(relativePath, targetType, propertyName, curve);
+            float dt = 1f / 60f;
+            foreach (string relativePath in relativePaths)
+            {
+                clip.SetCurve(relativePath, targetType, propertyName, AnimationCurve.Linear(0f, value, dt, value));
+            }
             saveAsset?.Invoke(clip);
             return clip;
         }
 
         private static AnimationClip CreateVector3Clip(
             string clipName,
-            string relativePath,
+            string[] relativePaths,
             string propertyPrefix,
             Vector3 value,
             Action<UnityEngine.Object> saveAsset)
         {
             var clip = new AnimationClip { name = clipName };
             float dt = 1f / 60f;
-            clip.SetCurve(relativePath, typeof(Transform), $"{propertyPrefix}.x", AnimationCurve.Linear(0f, value.x, dt, value.x));
-            clip.SetCurve(relativePath, typeof(Transform), $"{propertyPrefix}.y", AnimationCurve.Linear(0f, value.y, dt, value.y));
-            clip.SetCurve(relativePath, typeof(Transform), $"{propertyPrefix}.z", AnimationCurve.Linear(0f, value.z, dt, value.z));
+            foreach (string relativePath in relativePaths)
+            {
+                clip.SetCurve(relativePath, typeof(Transform), $"{propertyPrefix}.x", AnimationCurve.Linear(0f, value.x, dt, value.x));
+                clip.SetCurve(relativePath, typeof(Transform), $"{propertyPrefix}.y", AnimationCurve.Linear(0f, value.y, dt, value.y));
+                clip.SetCurve(relativePath, typeof(Transform), $"{propertyPrefix}.z", AnimationCurve.Linear(0f, value.z, dt, value.z));
+            }
             saveAsset?.Invoke(clip);
             return clip;
         }
 
-        private static AnimationClip CreateSelfViewClip(
+        private static AnimationClip CreateSelfViewStateClip(
             string clipName,
-            bool active,
+            bool bodyActive,
+            bool headActive,
+            bool filterMainBoard,
             Action<UnityEngine.Object> saveAsset)
         {
-            float v = active ? 1f : 0f;
+            float bodyVal = bodyActive ? 1f : 0f;
+            float headVal = headActive ? 1f : 0f;
+            float filterVal = filterMainBoard ? 1f : 0f;
             float dt = 1f / 60f;
             var clip = new AnimationClip { name = clipName };
-            clip.SetCurve("SelfViewRig", typeof(GameObject), "m_IsActive", AnimationCurve.Linear(0f, v, dt, v));
-            clip.SetCurve("BoardPivot/DisplayQuad", typeof(MeshRenderer), "material._ViewFilter", AnimationCurve.Linear(0f, v, dt, v));
-            saveAsset?.Invoke(clip);
-            return clip;
-        }
-
-        private static AnimationClip CreateDualSourceWeightClip(
-            string clipName,
-            string relativePath,
-            Type targetType,
-            float weight0,
-            float weight1,
-            Action<UnityEngine.Object> saveAsset)
-        {
-            var clip = new AnimationClip { name = clipName };
-            float dt = 1f / 60f;
-            clip.SetCurve(relativePath, targetType, "Sources.source0.Weight", AnimationCurve.Linear(0f, weight0, dt, weight0));
-            clip.SetCurve(relativePath, targetType, "Sources.source1.Weight", AnimationCurve.Linear(0f, weight1, dt, weight1));
+            clip.SetCurve("SelfViewRig/BodyPivot", typeof(GameObject), "m_IsActive", AnimationCurve.Linear(0f, bodyVal, dt, bodyVal));
+            clip.SetCurve("SelfViewRig/HeadPivot", typeof(GameObject), "m_IsActive", AnimationCurve.Linear(0f, headVal, dt, headVal));
+            clip.SetCurve("BoardPivot/DisplayQuad", typeof(MeshRenderer), "material._ViewFilter", AnimationCurve.Linear(0f, filterVal, dt, filterVal));
             saveAsset?.Invoke(clip);
             return clip;
         }
